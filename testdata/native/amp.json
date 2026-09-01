@@ -1,0 +1,1 @@
+{"v":1,"id":"native-amp","created":1767225600000,"title":"Native fixture","env":{"initial":{"trees":[{"uri":"file:///tmp/project","repository":{"ref":"main"}}],"platform":{"clientVersion":"1.0"}}},"messages":[{"messageId":1,"role":"user","meta":{"sentAt":1767225600000},"content":[{"type":"text","text":"native fixture"}]}]}

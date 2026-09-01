@@ -1,0 +1,2 @@
+{"type":"session","version":3,"id":"native-pi","timestamp":"2026-01-01T00:00:00Z","cwd":"/tmp/project"}
+{"type":"message","id":"user-1","parentId":"","timestamp":"2026-01-01T00:00:01Z","message":{"role":"user","content":[{"type":"text","text":"native fixture"}]}}

@@ -45,4 +45,44 @@ jobs:
           cache-dependency-path: sdk/typescript/package-lock.json
       - run: npm ci
       - run: npm test
+      - run: npm audit
       - run: npm pack --dry-run
+
+  quality:
+    name: Release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - name: Check Go formatting
+        run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - name: Static analysis
+        run: go run honnef.co/go/tools/cmd/staticcheck@2026.1 ./...
+      - uses: golang/govulncheck-action@v1.1.0
+        with:
+          go-package: ./...
+      - name: Fuzz codecs
+        run: go test -run=^$ -fuzz=FuzzCodecsDoNotPanic -fuzztime=30s
+      - name: Fuzz selectors
+        run: go test -run=^$ -fuzz=FuzzSelectorDoesNotPanic -fuzztime=30s
+      - name: Build TypeScript SDK
+        working-directory: sdk/typescript
+        run: npm ci && npm test && npm audit
+      - name: Validate canonical fixtures against JSON Schema
+        run: node .github/scripts/validate-schema.mjs
+      - name: Verify Go and TypeScript archives in both directions
+        run: |
+          mkdir -p /tmp/moirai-interop
+          go build -o /tmp/moirai-interop/moirai ./cmd/moirai
+          /tmp/moirai-interop/moirai archive create testdata/archive-interop-session.json --from simple --out /tmp/moirai-interop/go.moirai
+          node .github/scripts/archive-interop.mjs /tmp/moirai-interop/go.moirai /tmp/moirai-interop/typescript.moirai testdata/archive-interop-session.json
+          /tmp/moirai-interop/moirai archive verify /tmp/moirai-interop/typescript.moirai

@@ -16,8 +16,9 @@ Thank you for helping make agent sessions portable across tools.
   the harness output—not only with output from its paired writer.
 - A writable adapter must pass canonical → native → canonical round trips for
   text, tool calls/results, timestamps, metadata, and supported media.
-- Unsupported native records produce a warning or an `unknown` block. Do not
-  silently discard data and call the conversion lossless.
+- Unsupported native records produce a warning. Use an `unknown` block or
+  extension field only when the adapter can preserve it safely. Never call a
+  canonical conversion byte-lossless.
 - Source-only stores must return `ErrSourceOnly` for mutation attempts.
 - A new handoff must mint a new ID and retain source provenance.
 - Range selection must never separate a known tool call from its result.
@@ -32,9 +33,13 @@ Node.js 20 or newer.
 go test -race ./...
 go vet ./...
 go build ./cmd/moirai
+staticcheck ./...
+govulncheck ./...
 npm --prefix sdk/typescript ci
 npm --prefix sdk/typescript test
+npm --prefix sdk/typescript audit
 npm --prefix sdk/typescript pack --dry-run
+node .github/scripts/validate-schema.mjs
 ```
 
 When changing the canonical model, update all of the following in the same pull

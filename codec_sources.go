@@ -85,7 +85,7 @@ func (HermesCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 				content = decoded
 			}
 			isError := stringValue(row["effect_disposition"]) == "denied"
-			if result := object(content); boolValue(result["success"]) == false && result["success"] != nil || integerValue(result["exit_code"]) != 0 || result["error"] != nil {
+			if result := object(content); !boolValue(result["success"]) && result["success"] != nil || integerValue(result["exit_code"]) != 0 || result["error"] != nil {
 				isError = true
 			}
 			t.Messages = append(t.Messages, Message{ID: fmt.Sprint(row["id"]), Role: RoleUser, Content: []Block{{Type: BlockToolResult, ToolUseID: id, Content: rawJSON(content), IsError: isError}}, Timestamp: stamp})
@@ -152,7 +152,7 @@ type CoworkCodec struct{}
 
 func (CoworkCodec) Format() Format { return FormatCowork }
 func (CoworkCodec) Info() HarnessInfo {
-	return HarnessInfo{Format: FormatCowork, DisplayName: "Claude Cowork", Capability: Capability{Read: true, Write: true, Discover: true, Save: true, Delete: true, Continue: true}}
+	return HarnessInfo{Format: FormatCowork, DisplayName: "Claude Cowork", Capability: Capability{Read: true, Write: true, Discover: true, Save: true, Delete: true}}
 }
 
 func (CoworkCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {

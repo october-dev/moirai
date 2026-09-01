@@ -57,6 +57,7 @@ type MediaSource struct {
 	Data      string `json:"data,omitempty"`
 	Path      string `json:"path,omitempty"`
 	URL       string `json:"url,omitempty"`
+	Text      string `json:"text,omitempty"`
 }
 
 type Artifact struct {
@@ -108,19 +109,21 @@ type Provenance struct {
 	ImportedAt       string `json:"imported_at,omitempty"`
 	ParentSessionID  string `json:"parent_session_id,omitempty"`
 	ParentCheckpoint string `json:"parent_checkpoint,omitempty"`
+	SourceCWD        string `json:"source_cwd,omitempty"`
 }
 
 type Metadata struct {
-	ID         string          `json:"id"`
-	Timestamp  string          `json:"timestamp,omitempty"`
-	UpdatedAt  string          `json:"updated_at,omitempty"`
-	CWD        string          `json:"cwd,omitempty"`
-	GitBranch  string          `json:"git_branch,omitempty"`
-	Title      string          `json:"title,omitempty"`
-	Model      string          `json:"model,omitempty"`
-	CLIVersion string          `json:"cli_version,omitempty"`
-	Provenance *Provenance     `json:"provenance,omitempty"`
-	Extra      json.RawMessage `json:"extra,omitempty"`
+	ID            string          `json:"id"`
+	Timestamp     string          `json:"timestamp,omitempty"`
+	UpdatedAt     string          `json:"updated_at,omitempty"`
+	CWD           string          `json:"cwd,omitempty"`
+	GitBranch     string          `json:"git_branch,omitempty"`
+	Title         string          `json:"title,omitempty"`
+	Model         string          `json:"model,omitempty"`
+	ModelProvider string          `json:"model_provider,omitempty"`
+	CLIVersion    string          `json:"cli_version,omitempty"`
+	Provenance    *Provenance     `json:"provenance,omitempty"`
+	Extra         json.RawMessage `json:"extra,omitempty"`
 }
 
 type Transcript struct {

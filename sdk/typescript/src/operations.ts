@@ -10,21 +10,27 @@ export function parseSelector(value: string): Selector {
   if (pieces.length === 1) return { sessionId: pieces[0]! };
   if (pieces.length !== 2 || !pieces[0] || !pieces[1]) throw new MoiraiError("invalid_transcript", "invalid selector");
   const range = pieces[1].split("-");
-  if (range.length > 2 || !range[0]) throw new MoiraiError("invalid_transcript", "invalid range");
-  const start = Number(range[0]);
-  const end = range.length === 2 ? Number(range[1]) : start;
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) {
+  if (range.length > 2 || range.every((part) => !part)) throw new MoiraiError("invalid_transcript", "invalid range");
+  if (range.some((part) => part !== "" && !/^\d+$/u.test(part))) throw new MoiraiError("invalid_transcript", "invalid range");
+  const start = range[0] ? Number(range[0]) : 1;
+  const end = range.length === 1 ? start : range[1] ? Number(range[1]) : 0;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || (end !== 0 && end < start)) {
     throw new MoiraiError("invalid_transcript", "invalid range");
   }
   return { sessionId: pieces[0], span: { start, end } };
 }
 
 export function select(transcript: Transcript, span: Span): Transcript {
-  if (!Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) || span.start < 1 || span.end < span.start || span.end > transcript.messages.length) {
+  const normalizedEnd = span.end === 0 ? transcript.messages.length : span.end;
+  if (!Number.isSafeInteger(span.start) || !Number.isSafeInteger(normalizedEnd) || span.start < 1 || normalizedEnd < span.start || normalizedEnd > transcript.messages.length) {
     throw new MoiraiError("invalid_transcript", "range outside transcript");
   }
   const start = span.start - 1;
-  const end = span.end;
+  const end = normalizedEnd;
+  const first = transcript.messages[start]!;
+  if (first.role !== "user" || !first.content.some((block) => block.type !== "tool_use" && block.type !== "tool_result")) {
+    throw new MoiraiError("invalid_transcript", "range must start on a user message with portable content");
+  }
   const allCalls = new Map<string, number>();
   const allResults = new Map<string, number>();
   transcript.messages.forEach((message, messageIndex) => message.content.forEach((block) => {
@@ -33,7 +39,10 @@ export function select(transcript: Transcript, span: Span): Transcript {
   }));
   for (let messageIndex = start; messageIndex < end; messageIndex += 1) {
     for (const block of transcript.messages[messageIndex]!.content) {
-      if (block.type === "tool_use" && block.id) assertPairedInside("call", block.id, allResults.get(block.id), start, end);
+      if (block.type === "tool_use" && block.id) {
+        if (allResults.get(block.id) === undefined) throw new MoiraiError("invalid_transcript", `range ends with unanswered tool call ${JSON.stringify(block.id)}`);
+        assertPairedInside("call", block.id, allResults.get(block.id), start, end);
+      }
       if (block.type === "tool_result" && block.tool_use_id) assertPairedInside("result", block.tool_use_id, allCalls.get(block.tool_use_id), start, end);
     }
   }
@@ -43,7 +52,7 @@ export function select(transcript: Transcript, span: Span): Transcript {
   result.meta.provenance = {
     ...(result.meta.provenance ?? {}),
     parent_session_id: transcript.meta.id,
-    parent_checkpoint: `messages:${span.start}-${span.end}`,
+    parent_checkpoint: `messages:${span.start}-${normalizedEnd}`,
   };
   return result;
 }

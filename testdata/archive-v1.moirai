@@ -1,12 +1,14 @@
 {
   "format": "moirai.session",
   "version": "1",
-  "created_at": "2026-01-01T00:00:00Z",
+  "created_at": "2026-09-01T23:12:51.344477Z",
   "transcript": {
     "schema_version": "1.0",
     "meta": {
       "id": "interop",
-      "timestamp": "2026-01-01T00:00:00Z"
+      "timestamp": "2026-01-01T00:00:00Z",
+      "cwd": "/tmp/éxample",
+      "title": "\u003cportable\u003e \u0026 verified"
     },
     "messages": [
       {
@@ -14,11 +16,45 @@
         "content": [
           {
             "type": "text",
-            "text": "hello"
+            "text": "if a \u003c b \u0026\u0026 c \u003e d { café(); }"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call-1",
+            "name": "calculate",
+            "input": {
+              "nested": {
+                "ratio": 1.0,
+                "small": 0.00001,
+                "tiny": 1e-7,
+                "large": 1e20,
+                "negative_zero": -0.0,
+                "symbols": "\u003c\u0026\u003e"
+              },
+              "items": [3, 2, 1]
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-1",
+            "content": {
+              "ok": true,
+              "value": 1.0
+            }
           }
         ]
       }
     ]
   },
-  "sha256": "5cf95a306c1d1c9966f3dc353c935dc2671252f6710364ef9403919b3cd6e847"
+  "sha256": "80eb05f3080a1a8f4bcf5e1560e4f7f1b2630a8c2adaa292411c2fa643ac134b"
 }

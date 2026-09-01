@@ -1,0 +1,1 @@
+{"info":{"id":"ses_native","directory":"/tmp/project","title":"Native fixture","version":"1","time":{"created":1767225600000,"updated":1767225600000},"model":{"id":"model-a"}},"messages":[{"info":{"id":"msg_1","role":"user","time":{"created":1767225600000}},"parts":[{"type":"text","text":"native fixture","synthetic":false}]}]}

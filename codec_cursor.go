@@ -193,7 +193,10 @@ func (CursorCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, err
 	if len(blobs) > 0 {
 		latest = stringValue(object(blobs[len(blobs)-1])["id"])
 	}
-	meta := map[string]any{"agentId": id, "latestRootBlobId": latest, "name": firstNonEmpty(t.Meta.Title, "Imported Session"), "createdAt": epochMillis(t.Meta.Timestamp), "mode": "default", "isRunEverything": true, "approvalMode": "unrestricted", "lastUsedModel": firstNonEmpty(t.Meta.Model, "composer-2.5"), "workspacePath": t.Meta.CWD}
+	meta := map[string]any{"agentId": id, "latestRootBlobId": latest, "name": firstNonEmpty(t.Meta.Title, "Imported Session"), "createdAt": epochMillis(t.Meta.Timestamp), "mode": "default", "workspacePath": t.Meta.CWD}
+	if t.Meta.Model != "" {
+		meta["lastUsedModel"] = t.Meta.Model
+	}
 	metaBytes, _ := json.Marshal(meta)
 	body := map[string]any{"blobs": blobs, "meta": []any{map[string]any{"key": "0", "value": hex.EncodeToString(metaBytes)}}, "session_meta": map[string]any{"schemaVersion": 1, "createdAtMs": epochMillis(t.Meta.Timestamp), "hasConversation": len(blobs) > 0, "title": t.Meta.Title, "updatedAtMs": epochMillis(firstNonEmpty(t.Meta.UpdatedAt, t.Meta.Timestamp))}}
 	result, err := encodeObject(body)
@@ -284,7 +287,7 @@ type CursorDesktopCodec struct{}
 
 func (CursorDesktopCodec) Format() Format { return FormatCursorDesktop }
 func (CursorDesktopCodec) Info() HarnessInfo {
-	return HarnessInfo{Format: FormatCursorDesktop, DisplayName: "Cursor", Capability: Capability{Read: true, Write: true, Discover: true, Save: true, Delete: true, Continue: true}}
+	return HarnessInfo{Format: FormatCursorDesktop, DisplayName: "Cursor", Capability: Capability{Read: true, Write: true, Discover: true, Save: true, Delete: true}}
 }
 
 func (CursorDesktopCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {

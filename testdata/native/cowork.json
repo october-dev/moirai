@@ -1,0 +1,1 @@
+{"header":{"sessionId":"local_native_cowork","cliSessionId":"native-claude-child","createdAt":1767225600000,"cwd":"/tmp/project","title":"Native fixture","model":"model-a"},"transcript":[{"type":"user","sessionId":"native-claude-child","cwd":"/tmp/project","uuid":"user-1","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"native fixture"}}],"audit":[]}

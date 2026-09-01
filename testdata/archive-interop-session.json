@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "id": "interop",
+    "timestamp": "2026-01-01T00:00:00Z",
+    "cwd": "/tmp/éxample",
+    "title": "<portable> & verified"
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "if a < b && c > d { café(); }"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "call-1",
+          "name": "calculate",
+          "input": {
+            "nested": {
+              "ratio": 1.0,
+              "small": 0.00001,
+              "tiny": 1e-7,
+              "large": 1e20,
+              "negative_zero": -0.0,
+              "symbols": "<&>"
+            },
+            "items": [3, 2, 1]
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "call-1",
+          "content": { "ok": true, "value": 1.0 }
+        }
+      ]
+    }
+  ]
+}

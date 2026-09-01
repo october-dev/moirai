@@ -6,7 +6,11 @@ import (
 )
 
 func DetectFormat(data []byte) (Format, error) {
-	limits := DefaultLimits()
+	return DetectFormatWithLimits(data, DefaultLimits())
+}
+
+func DetectFormatWithLimits(data []byte, limits Limits) (Format, error) {
+	limits = limits.normalized()
 	if int64(len(data)) > limits.MaxInputBytes {
 		return "", ErrLimitExceeded
 	}
@@ -18,15 +22,39 @@ func DetectFormat(data []byte) (Format, error) {
 		return "", err
 	}
 	var value map[string]any
-	if err := decodeJSONDocument(trimmed, &value, limits); err != nil {
-		first := trimmed
-		if newline := bytes.IndexByte(trimmed, '\n'); newline >= 0 {
-			first = bytes.TrimSpace(trimmed[:newline])
+	if err := decodeJSONDocument(trimmed, &value, limits); err == nil {
+		return detectObject(value)
+	}
+	remaining := trimmed
+	markers := map[Format]bool{}
+	for lines := 0; len(remaining) > 0 && lines < 512; lines++ {
+		line := remaining
+		if newline := bytes.IndexByte(remaining, '\n'); newline >= 0 {
+			line, remaining = remaining[:newline], remaining[newline+1:]
+		} else {
+			remaining = nil
 		}
-		if lineErr := decodeJSONDocument(first, &value, limits); lineErr != nil {
-			return "", fmt.Errorf("%w: cannot detect non-JSON input", ErrUnknownFormat)
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || decodeJSONDocument(line, &value, limits) != nil {
+			continue
+		}
+		if format, err := detectObject(value); err == nil {
+			return format, nil
+		}
+		kind := stringValue(value["type"])
+		if kind == "file-history-snapshot" || kind == "progress" || kind == "queue-operation" || kind == "system" || kind == "attachment" {
+			markers[FormatClaudeCode] = true
 		}
 	}
+	if len(markers) == 1 {
+		for format := range markers {
+			return format, nil
+		}
+	}
+	return "", fmt.Errorf("%w: cannot detect JSON or JSONL input", ErrUnknownFormat)
+}
+
+func detectObject(value map[string]any) (Format, error) {
 	kind := stringValue(value["type"])
 	if kind == "session_meta" || kind == "turn_context" || kind == "response_item" || kind == "event_msg" {
 		return FormatCodex, nil
@@ -79,7 +107,7 @@ func DetectFormat(data []byte) (Format, error) {
 func Parse(data []byte, format Format, opts ParseOptions) (*ParseResult, Format, error) {
 	if format == "" {
 		var err error
-		format, err = DetectFormat(data)
+		format, err = DetectFormatWithLimits(data, opts.Limits)
 		if err != nil {
 			return nil, "", err
 		}

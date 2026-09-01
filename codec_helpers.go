@@ -141,7 +141,13 @@ func renderLossWarnings(t *Transcript, format Format) []Warning {
 		return nil
 	}
 	var warnings []Warning
+	if len(t.Extra) > 0 || len(t.Meta.Extra) > 0 {
+		warnings = append(warnings, Warning{Code: "extension_omitted", Message: fmt.Sprintf("%s cannot represent canonical extension data; extension omitted", format)})
+	}
 	for messageIndex, message := range t.Messages {
+		if len(message.Extra) > 0 {
+			warnings = append(warnings, Warning{Path: fmt.Sprintf("messages[%d].extra", messageIndex), Code: "extension_omitted", Message: fmt.Sprintf("%s cannot represent message extension data; extension omitted", format)})
+		}
 		for blockIndex, block := range message.Content {
 			if renderSupportsBlock(format, message.Role, block) {
 				continue
@@ -348,6 +354,8 @@ func parseAnthropicContent(v any, messageIndex int, pending *[]string) ([]Block,
 			block = Block{Type: BlockText, Text: firstNonEmpty(stringValue(entry["text"]), stringValue(entry["content"]))}
 		case "thinking", "reasoning", "summary_text":
 			block = Block{Type: BlockThinking, Text: firstNonEmpty(stringValue(entry["thinking"]), stringValue(entry["text"])), Signature: stringValue(entry["signature"]), Encrypted: firstNonEmpty(stringValue(entry["encrypted"]), stringValue(entry["encrypted_content"]))}
+		case "redacted_thinking":
+			block = Block{Type: BlockThinking, Encrypted: firstNonEmpty(stringValue(entry["data"]), stringValue(entry["encrypted"]))}
 		case "tool_use", "toolCall", "function_call", "custom_tool_call":
 			id := firstNonEmpty(stringValue(entry["id"]), stringValue(entry["call_id"]), stringValue(entry["callID"]))
 			if id == "" {
@@ -398,42 +406,6 @@ func firstNonNil(values ...any) any {
 		}
 	}
 	return nil
-}
-
-func renderAnthropicContent(blocks []Block) []any {
-	result := make([]any, 0, len(blocks))
-	for _, block := range blocks {
-		switch block.Type {
-		case BlockText:
-			result = append(result, map[string]any{"type": "text", "text": block.Text})
-		case BlockThinking:
-			item := map[string]any{"type": "thinking", "thinking": block.Text}
-			if block.Signature != "" {
-				item["signature"] = block.Signature
-			}
-			if block.Encrypted != "" {
-				item["encrypted"] = block.Encrypted
-			}
-			result = append(result, item)
-		case BlockToolUse:
-			var input any
-			if len(block.Input) > 0 {
-				_ = json.Unmarshal(block.Input, &input)
-			}
-			result = append(result, map[string]any{"type": "tool_use", "id": block.ID, "name": block.Name, "input": input})
-		case BlockToolResult:
-			var content any
-			if len(block.Content) > 0 {
-				_ = json.Unmarshal(block.Content, &content)
-			}
-			result = append(result, map[string]any{"type": "tool_result", "tool_use_id": block.ToolUseID, "content": content, "is_error": block.IsError})
-		case BlockImage:
-			if block.Source != nil {
-				result = append(result, map[string]any{"type": "image", "source": block.Source})
-			}
-		}
-	}
-	return result
 }
 
 func usageFromMap(v any, inputKeys, outputKeys []string) *Usage {

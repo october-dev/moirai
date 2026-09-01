@@ -31,7 +31,8 @@
         "source_session_id": { "type": "string" },
         "imported_at": { "$ref": "#/$defs/rfc3339" },
         "parent_session_id": { "type": "string" },
-        "parent_checkpoint": { "type": "string" }
+        "parent_checkpoint": { "type": "string" },
+        "source_cwd": { "type": "string" }
       },
       "additionalProperties": false
     },
@@ -46,6 +47,7 @@
         "git_branch": { "type": "string" },
         "title": { "type": "string" },
         "model": { "type": "string" },
+        "model_provider": { "type": "string" },
         "cli_version": { "type": "string" },
         "provenance": { "$ref": "#/$defs/provenance" },
         "extra": true
@@ -71,7 +73,8 @@
         "media_type": { "type": "string" },
         "data": { "type": "string" },
         "path": { "type": "string" },
-        "url": { "type": "string" }
+        "url": { "type": "string" },
+        "text": { "type": "string" }
       },
       "additionalProperties": false
     },

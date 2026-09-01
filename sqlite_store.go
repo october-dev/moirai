@@ -18,6 +18,7 @@ import (
 )
 
 func openSQLite(path string, readOnly bool) (*sql.DB, error) {
+	existed := fileExists(path)
 	mode := "rwc"
 	pragmas := "&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
 	if readOnly {
@@ -34,7 +35,7 @@ func openSQLite(path string, readOnly bool) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	if !readOnly {
+	if !readOnly && !existed {
 		if err := os.Chmod(path, 0o600); err != nil {
 			db.Close()
 			return nil, err
@@ -528,9 +529,10 @@ func (s *CursorDesktopStore) Discover(ctx context.Context) ([]SessionRef, error)
 		return nil, err
 	}
 	defer db.Close()
-	rows, err := queryObjects(ctx, db, `SELECT composerId FROM composerHeaders ORDER BY recency DESC`)
+	rows, err := queryObjects(ctx, db, `SELECT h.composerId, h.value, h.createdAt, h.lastUpdatedAt, CAST(d.value AS TEXT) AS composerData
+FROM composerHeaders h LEFT JOIN cursorDiskKV d ON d.key = 'composerData:' || h.composerId ORDER BY h.recency DESC`)
 	if err != nil {
-		rows, err = queryObjects(ctx, db, `SELECT key FROM cursorDiskKV WHERE key LIKE 'composerData:%'`)
+		rows, err = queryObjects(ctx, db, `SELECT key, CAST(value AS TEXT) AS composerData FROM cursorDiskKV WHERE key LIKE 'composerData:%'`)
 		if err != nil {
 			return nil, err
 		}
@@ -539,13 +541,14 @@ func (s *CursorDesktopStore) Discover(ctx context.Context) ([]SessionRef, error)
 	for _, row := range rows {
 		id := fmt.Sprint(firstNonNil(row["composerId"], row["key"]))
 		id = strings.TrimPrefix(id, "composerData:")
-		ref := SessionRef{Format: FormatCursorDesktop, ID: id, Location: id}
-		parsed, loadErr := s.Load(ctx, ref, ParseOptions{Limits: DefaultLimits()})
-		if loadErr != nil || len(parsed.Transcript.Messages) == 0 {
-			continue
-		}
-		meta := parsed.Transcript.Meta
-		ref.ID, ref.Title, ref.CWD, ref.Model, ref.Timestamp, ref.ModifiedAt = meta.ID, meta.Title, meta.CWD, meta.Model, meta.Timestamp, meta.UpdatedAt
+		ref := SessionRef{Format: FormatCursorDesktop, ID: id, Location: id, Timestamp: timestampValue(row["createdAt"]), ModifiedAt: timestampValue(row["lastUpdatedAt"])}
+		var header map[string]any
+		_ = json.Unmarshal([]byte(fmt.Sprint(row["value"])), &header)
+		var composer map[string]any
+		_ = json.Unmarshal([]byte(fmt.Sprint(row["composerData"])), &composer)
+		ref.Title = firstNonEmpty(stringValue(header["name"]), stringValue(header["subtitle"]), stringValue(composer["name"]))
+		ref.CWD = stringValue(object(object(header["workspaceIdentifier"])["uri"])["fsPath"])
+		ref.Model = stringValue(object(composer["modelConfig"])["modelName"])
 		refs = append(refs, ref)
 	}
 	return refs, nil
@@ -575,11 +578,12 @@ func (s *CursorDesktopStore) Load(ctx context.Context, ref SessionRef, opts Pars
 	} else if composer == "" {
 		return nil, ErrSessionNotFound
 	}
-	bubbleRows, err := queryObjects(ctx, db, `SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE ? ORDER BY rowid`, "bubbleId:"+ref.ID+":%")
+	escapedID := escapeSQLiteLike(ref.ID)
+	bubbleRows, err := queryObjects(ctx, db, `SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE ? ESCAPE '\' ORDER BY rowid`, "bubbleId:"+escapedID+":%")
 	if err != nil {
 		return nil, err
 	}
-	auxRows, _ := queryObjects(ctx, db, `SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE ? AND key NOT LIKE ? AND key NOT LIKE 'composerData:%' AND key NOT LIKE 'agentKv:%' ORDER BY rowid`, "%"+ref.ID+"%", "bubbleId:"+ref.ID+":%")
+	auxRows, _ := queryObjects(ctx, db, `SELECT key, CAST(value AS TEXT) AS value FROM cursorDiskKV WHERE key LIKE ? ESCAPE '\' AND key NOT LIKE ? ESCAPE '\' AND key NOT LIKE 'composerData:%' AND key NOT LIKE 'agentKv:%' ORDER BY rowid`, "%"+escapedID+"%", "bubbleId:"+escapedID+":%")
 	bubbles := make([]any, len(bubbleRows))
 	for i := range bubbleRows {
 		bubbles[i] = bubbleRows[i]
@@ -612,6 +616,7 @@ func (s *CursorDesktopStore) Save(ctx context.Context, transcript *Transcript, o
 	if err := os.MkdirAll(filepath.Dir(s.dbPath()), 0o700); err != nil {
 		return nil, err
 	}
+	newDatabase := !fileExists(s.dbPath())
 	db, err := openSQLite(s.dbPath(), false)
 	if err != nil {
 		return nil, err
@@ -622,9 +627,13 @@ func (s *CursorDesktopStore) Save(ctx context.Context, transcript *Transcript, o
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS cursorDiskKV (key TEXT PRIMARY KEY, value BLOB);
+	if newDatabase {
+		if _, err := tx.ExecContext(ctx, `CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value BLOB);
 CREATE TABLE IF NOT EXISTS composerHeaders (composerId TEXT PRIMARY KEY, workspaceId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, isSubagent INTEGER, recency INTEGER, checkpointAt INTEGER, value TEXT);
 CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB)`); err != nil {
+			return nil, err
+		}
+	} else if err := requireSQLiteTables(ctx, tx, "cursorDiskKV", "composerHeaders", "ItemTable"); err != nil {
 		return nil, err
 	}
 	var exists int
@@ -637,21 +646,18 @@ UNION ALL SELECT 1 FROM cursorDiskKV WHERE key = ?
 	if exists != 0 {
 		return nil, ErrSessionExists
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM cursorDiskKV WHERE key LIKE ?`, "bubbleId:"+id+":%"); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO composerHeaders (composerId, workspaceId, createdAt, lastUpdatedAt, isArchived, isSubagent, recency, checkpointAt, value) VALUES (?,?,?,?,?,?,?,?,?)`, id, body["workspace_id"], body["created_at"], body["last_updated_at"], boolInt(boolValue(body["is_archived"])), boolInt(boolValue(body["is_subagent"])), body["recency"], body["checkpoint_at"], body["header"]); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO composerHeaders (composerId, workspaceId, createdAt, lastUpdatedAt, isArchived, isSubagent, recency, checkpointAt, value) VALUES (?,?,?,?,?,?,?,?,?)`, id, body["workspace_id"], body["created_at"], body["last_updated_at"], boolInt(boolValue(body["is_archived"])), boolInt(boolValue(body["is_subagent"])), body["recency"], body["checkpoint_at"], body["header"]); err != nil {
 		return nil, err
 	}
 	if composer := stringValue(body["composer_data"]); composer != "" {
-		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO cursorDiskKV (key,value) VALUES (?,?)`, "composerData:"+id, composer); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO cursorDiskKV (key,value) VALUES (?,?)`, "composerData:"+id, composer); err != nil {
 			return nil, err
 		}
 	}
 	for _, key := range []string{"bubbles", "aux"} {
 		for _, raw := range array(body[key]) {
 			row := object(raw)
-			if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO cursorDiskKV (key,value) VALUES (?,?)`, row["key"], row["value"]); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO cursorDiskKV (key,value) VALUES (?,?)`, row["key"], row["value"]); err != nil {
 				return nil, err
 			}
 		}
@@ -724,7 +730,8 @@ func (s *CursorDesktopStore) Delete(ctx context.Context, ref SessionRef) error {
 	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM cursorDiskKV WHERE key = ? OR key LIKE ? OR key LIKE ?`, "composerData:"+ref.ID, "bubbleId:"+ref.ID+":%", "%:"+ref.ID+"%"); err != nil {
+	escapedID := escapeSQLiteLike(ref.ID)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM cursorDiskKV WHERE key = ? OR key LIKE ? ESCAPE '\'`, "composerData:"+ref.ID, "bubbleId:"+escapedID+":%"); err != nil {
 		return err
 	}
 	if err := unregisterCursorSidebar(ctx, tx, ref.ID); err != nil {
@@ -735,6 +742,23 @@ func (s *CursorDesktopStore) Delete(ctx context.Context, ref SessionRef) error {
 		return ErrSessionNotFound
 	}
 	return tx.Commit()
+}
+
+func escapeSQLiteLike(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
+}
+
+func requireSQLiteTables(ctx context.Context, tx *sql.Tx, tables ...string) error {
+	for _, table := range tables {
+		var exists int
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?)`, table).Scan(&exists); err != nil {
+			return err
+		}
+		if exists == 0 {
+			return fmt.Errorf("%w: Cursor database is missing table %s", ErrUnsupported, table)
+		}
+	}
+	return nil
 }
 
 func unregisterCursorSidebar(ctx context.Context, tx *sql.Tx, id string) error {

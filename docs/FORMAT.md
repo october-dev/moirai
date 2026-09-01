@@ -80,10 +80,12 @@ message timestamps are absent.
 
 ## Extensions and information loss
 
-`extra` accepts format-specific JSON at transcript, metadata, and message level.
-Native events without a canonical equivalent use an `unknown` block. A codec
-may emit warnings for recoverable omissions or repairs. Callers should surface
-warnings rather than treating every conversion as lossless.
+`extra` accepts format-specific JSON at transcript, metadata, and message level,
+and `unknown` can retain a native event supplied by a caller. The current native
+readers do not populate these fields for every unmodelled record. They emit
+warnings for known omissions and repairs; callers must surface those warnings
+and must not treat native conversion as byte-lossless. The exact adapter
+boundary is listed in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 Hidden model state, live processes, terminal state, credentials, and data that
 the source did not persist are outside the format.
@@ -102,6 +104,12 @@ A `.moirai` archive is a JSON envelope:
 }
 ```
 
+The digest input is the schema-known transcript after strict decoding: object
+keys are recursively sorted, strings are UTF-8 JSON strings without HTML
+escaping, numbers use a fixed 17-digit IEEE-754 exponent form, and no whitespace
+is included. Unknown transcript fields are rejected. This canonical form is
+identical in the Go and TypeScript SDKs.
+
 The digest protects integrity, not authenticity or confidentiality. Verify it
 before accepting the transcript, and protect the archive separately in storage
 and transit.
@@ -110,7 +118,8 @@ and transit.
 
 | Resource | Limit |
 | --- | ---: |
-| Input | 32 MiB |
+| Standalone input | 32 MiB |
+| Local-store session | 512 MiB |
 | Messages | 100,000 |
 | Blocks | 500,000 |
 | Text or structured block payload | 1 MiB |
@@ -118,5 +127,6 @@ and transit.
 | Metadata/extension payload | 1 MiB |
 | JSON nesting | 64 levels |
 
-Applications may choose stricter positive values. Relaxing limits for untrusted
-input should be treated as a security decision.
+Applications may choose stricter positive values. The CLI accepts
+`--max-input-bytes`; relaxing limits for untrusted input should be treated as a
+security decision.

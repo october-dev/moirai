@@ -1,10 +1,17 @@
 package moirai
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"math"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 const ArchiveVersion = "1"
@@ -25,7 +32,11 @@ func EncodeArchive(t *Transcript, limits Limits) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	digest := sha256.Sum256(payload)
+	canonical, err := canonicalTranscriptJSON(t)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(canonical)
 	archive := Archive{Format: "moirai.session", Version: ArchiveVersion, CreatedAt: nowRFC3339(), Transcript: payload, SHA256: hex.EncodeToString(digest[:])}
 	encoded, err := json.MarshalIndent(archive, "", "  ")
 	if err != nil {
@@ -50,10 +61,10 @@ func DecodeArchive(data []byte, limits Limits) (*Transcript, error) {
 		return nil, fmt.Errorf("%w: archive %q/%q", ErrUnsupportedVersion, archive.Format, archive.Version)
 	}
 	var transcript Transcript
-	if err := json.Unmarshal(archive.Transcript, &transcript); err != nil {
+	if err := decodeTranscriptStrict(archive.Transcript, &transcript); err != nil {
 		return nil, fmt.Errorf("%w: transcript: %v", ErrInvalidTranscript, err)
 	}
-	canonical, err := json.Marshal(&transcript)
+	canonical, err := canonicalTranscriptJSON(&transcript)
 	if err != nil {
 		return nil, fmt.Errorf("%w: transcript: %v", ErrInvalidTranscript, err)
 	}
@@ -65,4 +76,113 @@ func DecodeArchive(data []byte, limits Limits) (*Transcript, error) {
 		return nil, err
 	}
 	return &transcript, nil
+}
+
+// canonicalTranscriptJSON defines the language-independent archive digest
+// input. Object keys are sorted, strings are UTF-8 JSON strings without HTML
+// escaping, and every finite JSON number uses a fixed 17-digit exponent form.
+func canonicalTranscriptJSON(transcript *Transcript) ([]byte, error) {
+	payload, err := json.Marshal(transcript)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	var output bytes.Buffer
+	if err := writeCanonicalJSON(&output, value); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func writeCanonicalJSON(output *bytes.Buffer, value any) error {
+	switch value := value.(type) {
+	case nil:
+		output.WriteString("null")
+	case bool:
+		output.WriteString(strconv.FormatBool(value))
+	case string:
+		var encoded bytes.Buffer
+		encoder := json.NewEncoder(&encoded)
+		encoder.SetEscapeHTML(false)
+		if err := encoder.Encode(value); err != nil {
+			return err
+		}
+		text := strings.TrimSuffix(encoded.String(), "\n")
+		text = strings.ReplaceAll(text, `\u2028`, string(rune(0x2028)))
+		text = strings.ReplaceAll(text, `\u2029`, string(rune(0x2029)))
+		output.WriteString(text)
+	case json.Number:
+		number, err := strconv.ParseFloat(string(value), 64)
+		if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
+			return fmt.Errorf("%w: invalid JSON number", ErrInvalidTranscript)
+		}
+		if number == 0 {
+			number = 0
+		}
+		formatted := strconv.FormatFloat(number, 'e', 17, 64)
+		mantissa, exponent, _ := strings.Cut(formatted, "e")
+		sign := "+"
+		if strings.HasPrefix(exponent, "-") {
+			sign = "-"
+		}
+		exponent = strings.TrimLeft(exponent, "+-0")
+		if exponent == "" {
+			exponent = "0"
+		}
+		output.WriteString(mantissa + "e" + sign + exponent)
+	case []any:
+		output.WriteByte('[')
+		for index, child := range value {
+			if index > 0 {
+				output.WriteByte(',')
+			}
+			if err := writeCanonicalJSON(output, child); err != nil {
+				return err
+			}
+		}
+		output.WriteByte(']')
+	case map[string]any:
+		keys := make([]string, 0, len(value))
+		for key := range value {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		output.WriteByte('{')
+		for index, key := range keys {
+			if index > 0 {
+				output.WriteByte(',')
+			}
+			if err := writeCanonicalJSON(output, key); err != nil {
+				return err
+			}
+			output.WriteByte(':')
+			if err := writeCanonicalJSON(output, value[key]); err != nil {
+				return err
+			}
+		}
+		output.WriteByte('}')
+	default:
+		return fmt.Errorf("%w: unsupported canonical JSON value %T", ErrInvalidTranscript, value)
+	}
+	return nil
+}
+
+func decodeTranscriptStrict(data []byte, transcript *Transcript) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(transcript); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return errors.New("multiple transcript documents")
+		}
+		return err
+	}
+	return nil
 }

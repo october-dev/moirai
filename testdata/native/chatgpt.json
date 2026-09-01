@@ -1,0 +1,1 @@
+{"conversation_id":"native-chatgpt","create_time":1767225600,"title":"Native fixture","current_node":"node-1","mapping":{"node-1":{"id":"node-1","parent":null,"children":[],"message":{"id":"message-1","author":{"role":"user"},"create_time":1767225600,"content":{"content_type":"text","parts":["native fixture"]},"metadata":{}}}}}

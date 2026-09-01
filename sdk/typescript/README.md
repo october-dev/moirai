@@ -12,5 +12,5 @@ console.log(search(transcript, "failing test"));
 
 The SDK validates the versioned canonical schema, safety limits, tool-call
 pairing, UTF-8-bounded text projection, message ranges, fuzzy search, and
-SHA-256 integrity archives. Native local-store integration is provided by the
-Go library and `moirai` CLI.
+SHA-256 integrity archives. It does not include native harness codecs or local
+stores; those are provided only by the Go library and `moirai` CLI.

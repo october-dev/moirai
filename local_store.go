@@ -1,6 +1,8 @@
 package moirai
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -37,6 +39,10 @@ func (s *LocalFileStore) Format() Format { return s.format }
 func (s *LocalFileStore) Root() string   { return s.root }
 
 func (s *LocalFileStore) Discover(ctx context.Context) ([]SessionRef, error) {
+	return s.DiscoverWithLimits(ctx, DefaultStoreLimits())
+}
+
+func (s *LocalFileStore) DiscoverWithLimits(ctx context.Context, limits Limits) ([]SessionRef, error) {
 	if s.root == "" {
 		return nil, nil
 	}
@@ -45,7 +51,10 @@ func (s *LocalFileStore) Discover(ctx context.Context) ([]SessionRef, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	limits = limits.normalized()
 	var refs []SessionRef
+	byID := map[string]int{}
+	var skippedOversize []string
 	err := filepath.WalkDir(s.root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
@@ -57,17 +66,14 @@ func (s *LocalFileStore) Discover(ctx context.Context) ([]SessionRef, error) {
 			if path != s.root && entry.Type()&os.ModeSymlink != 0 {
 				return filepath.SkipDir
 			}
+			if s.format == FormatClaudeCode && path != s.root {
+				if entry.Name() == "subagents" || entry.Name() == "tool-results" || fileExists(filepath.Join(filepath.Dir(path), entry.Name()+s.extension)) {
+					return filepath.SkipDir
+				}
+			}
 			return nil
 		}
 		if entry.Type()&os.ModeSymlink != 0 || s.extension != "" && filepath.Ext(entry.Name()) != s.extension || s.match != nil && !s.match(path, entry) {
-			return nil
-		}
-		data, err := readFileLimited(path, DefaultLimits().MaxInputBytes)
-		if err != nil {
-			return nil
-		}
-		parsed, err := s.codec.Parse(data, ParseOptions{Limits: DefaultLimits(), SourceID: strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))})
-		if err != nil {
 			return nil
 		}
 		rel, err := filepath.Rel(s.root, path)
@@ -75,11 +81,122 @@ func (s *LocalFileStore) Discover(ctx context.Context) ([]SessionRef, error) {
 			return nil
 		}
 		info, _ := entry.Info()
-		meta := parsed.Transcript.Meta
-		refs = append(refs, SessionRef{Format: s.format, ID: meta.ID, Location: rel, Title: meta.Title, CWD: meta.CWD, Model: meta.Model, Timestamp: meta.Timestamp, ModifiedAt: fileModified(info)})
+		if info != nil && info.Size() > limits.MaxInputBytes {
+			skippedOversize = append(skippedOversize, rel)
+			return nil
+		}
+		meta, err := s.discoverMetadata(path, strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())), limits)
+		if err != nil || meta.ID == "" {
+			return nil
+		}
+		ref := SessionRef{Format: s.format, ID: meta.ID, Location: rel, Title: meta.Title, CWD: meta.CWD, Model: meta.Model, Timestamp: meta.Timestamp, ModifiedAt: fileModified(info)}
+		if existing, ok := byID[ref.ID]; ok {
+			if locationDepth(ref.Location) < locationDepth(refs[existing].Location) {
+				refs[existing] = ref
+			}
+			return nil
+		}
+		byID[ref.ID] = len(refs)
+		refs = append(refs, ref)
 		return nil
 	})
-	return refs, err
+	if err != nil {
+		return refs, err
+	}
+	if len(skippedOversize) > 0 {
+		return refs, &DiscoveryError{Code: "skipped_oversize", Path: skippedOversize[0], Count: len(skippedOversize), Err: ErrLimitExceeded}
+	}
+	return refs, nil
+}
+
+func (s *LocalFileStore) discoverMetadata(path, sourceID string, limits Limits) (Metadata, error) {
+	switch s.format {
+	case FormatClaudeCode, FormatCodex, FormatPi, FormatCampfire:
+		if meta, ok, err := shallowJSONLMetadata(path, s.format, sourceID, limits); err != nil || ok {
+			return meta, err
+		}
+	}
+	data, err := readFileLimited(path, limits.MaxInputBytes)
+	if err != nil {
+		return Metadata{}, err
+	}
+	parsed, err := s.codec.Parse(data, ParseOptions{Limits: limits, SourceID: sourceID})
+	if err != nil {
+		return Metadata{}, err
+	}
+	return parsed.Transcript.Meta, nil
+}
+
+func shallowJSONLMetadata(path string, format Format, sourceID string, limits Limits) (Metadata, bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return Metadata{}, false, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	maxLine := int(min(limits.MaxInputBytes, int64(^uint(0)>>1)))
+	scanner.Buffer(make([]byte, 64*1024), maxLine)
+	meta := Metadata{ID: sourceID}
+	conversational := false
+	for line := 0; scanner.Scan() && line < 512; line++ {
+		raw := bytes.TrimSpace(scanner.Bytes())
+		if len(raw) == 0 {
+			continue
+		}
+		var record map[string]any
+		if decodeJSONDocument(raw, &record, limits) != nil {
+			continue
+		}
+		kind := stringValue(record["type"])
+		switch format {
+		case FormatClaudeCode:
+			if kind == "summary" {
+				meta.Title = firstNonEmpty(meta.Title, stringValue(record["summary"]))
+			}
+			if kind == "user" || kind == "assistant" {
+				meta.ID = firstNonEmpty(stringValue(record["sessionId"]), meta.ID)
+				meta.Timestamp = firstNonEmpty(meta.Timestamp, timestampValue(record["timestamp"]))
+				meta.CWD = firstNonEmpty(meta.CWD, stringValue(record["cwd"]))
+				meta.GitBranch = firstNonEmpty(meta.GitBranch, stringValue(record["gitBranch"]))
+				meta.CLIVersion = firstNonEmpty(meta.CLIVersion, stringValue(record["version"]))
+				meta.Model = firstNonEmpty(meta.Model, stringValue(object(record["message"])["model"]))
+				conversational = true
+			}
+		case FormatCodex:
+			payload := object(record["payload"])
+			if kind == "session_meta" {
+				meta.ID = firstNonEmpty(stringValue(payload["id"]), meta.ID)
+				meta.Timestamp = firstNonEmpty(meta.Timestamp, timestampValue(payload["timestamp"]), timestampValue(record["timestamp"]))
+				meta.CWD = firstNonEmpty(meta.CWD, stringValue(payload["cwd"]))
+				meta.Model = firstNonEmpty(meta.Model, stringValue(payload["model"]))
+			}
+			conversational = conversational || kind == "response_item" || kind == "event_msg"
+		case FormatPi, FormatCampfire:
+			if kind == "session" {
+				meta.ID = firstNonEmpty(stringValue(record["id"]), meta.ID)
+				meta.Timestamp = firstNonEmpty(meta.Timestamp, timestampValue(record["timestamp"]))
+				meta.CWD = firstNonEmpty(meta.CWD, stringValue(record["cwd"]))
+			}
+			if kind == "session_info" {
+				meta.Title = firstNonEmpty(meta.Title, stringValue(record["name"]))
+			}
+			if kind == "model_change" {
+				meta.Model = firstNonEmpty(meta.Model, stringValue(record["modelId"]))
+			}
+			conversational = conversational || kind == "message" || kind == "custom_message"
+		}
+		if conversational && meta.ID != "" && meta.Timestamp != "" && (format == FormatClaudeCode || format == FormatCodex) {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return Metadata{}, false, err
+	}
+	return meta, conversational && meta.ID != "", nil
+}
+
+func locationDepth(location string) int {
+	return len(strings.FieldsFunc(filepath.Clean(location), func(r rune) bool { return r == '/' || r == '\\' }))
 }
 
 func (s *LocalFileStore) Load(ctx context.Context, ref SessionRef, opts ParseOptions) (*ParseResult, error) {
@@ -93,7 +210,8 @@ func (s *LocalFileStore) Load(ctx context.Context, ref SessionRef, opts ParseOpt
 	if err != nil {
 		return nil, &PathError{Path: ref.Location, Err: err}
 	}
-	data, err := readFileLimited(path, opts.Limits.normalized().MaxInputBytes)
+	opts.Limits = opts.Limits.storeNormalized()
+	data, err := readFileLimited(path, opts.Limits.MaxInputBytes)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, ErrSessionNotFound
 	}
@@ -140,7 +258,7 @@ func (s *LocalFileStore) Save(ctx context.Context, transcript *Transcript, opts 
 	if !created {
 		return nil, statErr
 	}
-	if err := atomicWrite(path, rendered.Data, 0o600); err != nil {
+	if err := atomicWriteExclusive(path, rendered.Data, 0o600); err != nil {
 		return nil, err
 	}
 	return &SavedSession{Ref: SessionRef{Format: s.format, ID: id, Location: location, Title: copy.Meta.Title, CWD: copy.Meta.CWD, Model: copy.Meta.Model, Timestamp: copy.Meta.Timestamp, ModifiedAt: time.Now().UTC().Format(time.RFC3339Nano)}, Created: true, Warnings: rendered.Warnings}, nil
@@ -298,7 +416,7 @@ func expandHome(value string) string {
 }
 
 func claudeLayout(t *Transcript, _ RenderOptions) (string, error) {
-	return filepath.Join(encodeWorkspace(t.Meta.CWD), t.Meta.ID+".jsonl"), nil
+	return filepath.Join(encodeClaudeProject(t.Meta.CWD), t.Meta.ID+".jsonl"), nil
 }
 
 func codexLayout(t *Transcript, _ RenderOptions) (string, error) {
@@ -333,6 +451,16 @@ func encodeWorkspace(cwd string) string {
 	trimmed := strings.TrimLeft(cwd, `/\`)
 	replacer := strings.NewReplacer("/", "-", "\\", "-", ":", "-")
 	return "--" + replacer.Replace(trimmed) + "--"
+}
+
+func encodeClaudeProject(cwd string) string {
+	if cwd == "" {
+		cwd = string(filepath.Separator)
+	}
+	if runtime.GOOS == "windows" {
+		cwd = strings.TrimPrefix(cwd, `\\?\`)
+	}
+	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(cwd)
 }
 
 func URLWorkspace(cwd string) string { return url.PathEscape(cwd) }

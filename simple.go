@@ -36,7 +36,7 @@ type simpleMessage struct {
 	Timestamp  string          `json:"timestamp,omitempty"`
 	Model      string          `json:"model,omitempty"`
 	Usage      *Usage          `json:"usage,omitempty"`
-	StopReason string          `json:"stop_reason,omitempty"`
+	StopReason json.RawMessage `json:"stop_reason,omitempty"`
 	Extra      json.RawMessage `json:"extra,omitempty"`
 }
 
@@ -104,12 +104,24 @@ func (SimpleCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 		if len(blocks) == 0 {
 			continue
 		}
-		t.Messages = append(t.Messages, Message{ID: raw.ID, Role: role, Content: blocks, Timestamp: raw.Timestamp, Model: raw.Model, Usage: raw.Usage, StopReason: raw.StopReason, Extra: raw.Extra})
+		t.Messages = append(t.Messages, Message{ID: raw.ID, Role: role, Content: blocks, Timestamp: raw.Timestamp, Model: raw.Model, Usage: raw.Usage, StopReason: simpleStopReason(raw.StopReason), Extra: raw.Extra})
 	}
 	if err := Validate(t, limits); err != nil {
 		return nil, err
 	}
 	return &ParseResult{Transcript: t, Warnings: warnings}, nil
+}
+
+func simpleStopReason(raw json.RawMessage) string {
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return value
+	}
+	var object map[string]any
+	if json.Unmarshal(raw, &object) == nil {
+		return stringValue(object["other"])
+	}
+	return ""
 }
 
 func parseSimpleContent(raw json.RawMessage, messageIndex int, pending *[]string) ([]Block, []Warning) {

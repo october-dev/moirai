@@ -10,8 +10,25 @@ type Limits struct {
 	MaxNestingDepth     int
 }
 
+// DefaultStoreMaxInputBytes is deliberately separate from the lower default
+// used for untrusted standalone input. Agent histories commonly exceed 32 MiB.
+const DefaultStoreMaxInputBytes int64 = 512 << 20
+
 func DefaultLimits() Limits {
 	return Limits{MaxInputBytes: 32 << 20, MaxMessages: 100_000, MaxBlocks: 500_000, MaxTextBytes: 1 << 20, MaxInlineMediaBytes: 16 << 20, MaxMetadataBytes: 1 << 20, MaxNestingDepth: 64}
+}
+
+func DefaultStoreLimits() Limits {
+	limits := DefaultLimits()
+	limits.MaxInputBytes = DefaultStoreMaxInputBytes
+	return limits
+}
+
+func (l Limits) storeNormalized() Limits {
+	if l.MaxInputBytes <= 0 {
+		l.MaxInputBytes = DefaultStoreMaxInputBytes
+	}
+	return l.normalized()
 }
 
 func (l Limits) normalized() Limits {

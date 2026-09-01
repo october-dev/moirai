@@ -55,7 +55,14 @@ func Launch(ctx context.Context, command LaunchCommand) error {
 		return fmt.Errorf("%w: empty launch command", ErrUnsupported)
 	}
 	cmd := exec.CommandContext(ctx, command.Program, command.Args...)
-	cmd.Dir = command.Dir
+	directory := command.Dir
+	if info, err := os.Stat(directory); directory == "" || err != nil || !info.IsDir() {
+		directory, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+	}
+	cmd.Dir = directory
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

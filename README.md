@@ -87,10 +87,10 @@ harness. Source-only stores are never modified.
 | Campfire | yes | yes | yes | yes | session JSONL |
 | OpenCode | yes | yes | yes | yes | SQLite discovery; native CLI import |
 | Cursor Agent | yes | yes | yes | yes | content-addressed chat store |
-| Cursor desktop | yes | yes | yes | yes | workspace SQLite state |
+| Cursor desktop | yes | yes | yes | no | import writes workspace state; opening the app is not session-specific resume |
 | Grok CLI | yes | yes | yes | yes | session bundles |
 | Antigravity CLI | yes | yes | yes | yes | protobuf records in SQLite |
-| Claude Cowork | yes | yes | yes | yes | local-agent session trees |
+| Claude Cowork | yes | yes | yes | no | import writes session trees; opening the app is not session-specific resume |
 | fx | yes | yes | yes | yes | event bundles |
 | Amp | yes | yes | read-only | no | local threads remain untouched |
 | Hermes Agent | yes | yes | read-only | no | local SQLite remains untouched |
@@ -128,6 +128,9 @@ Deletion is deliberately explicit:
 ```bash
 moirai delete SESSION_ID --format pi --yes
 ```
+
+For OpenCode, `delete` uses the harness's native archive flag rather than
+physically removing the session.
 
 ## Go API
 
@@ -183,10 +186,12 @@ schema and archive representation as the Go implementation.
 ## Continuity boundary
 
 Different harnesses do not expose identical runtime state. Moirai carries the
-durable, inspectable portion of a session and maps unsupported native events to
-explicit `unknown` blocks or warnings. It does not claim to recreate model-side
-state, in-memory processes, terminal state, or hidden reasoning that a harness
-never persisted.
+durable, inspectable portion represented by the canonical model and reports
+known omissions as warnings. Native readers currently do not synthesize
+`unknown` blocks or extension fields for every unmodelled record, so conversion
+is not byte-lossless. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the
+per-format boundary. Moirai does not recreate model-side state, in-memory
+processes, terminal state, or hidden reasoning that a harness never persisted.
 
 Moirai does not authenticate to remote chat services. Web conversation support
 accepts only exports supplied directly by the user.
@@ -194,13 +199,17 @@ accepts only exports supplied directly by the user.
 ## Safety
 
 - Input size, message, block, metadata, nesting, text, and inline-media limits
-  are enforced before untrusted content is accepted.
+  are enforced before untrusted content is accepted. Standalone files default
+  to 32 MiB; local-store sessions default to 512 MiB. Commands expose
+  `--max-input-bytes` for an explicit override.
 - Local writes are atomic, private (`0600` files and `0700` directories), and
   constrained to validated store paths.
 - Symlink and traversal checks protect store load, save, and deletion.
 - Existing source sessions are not overwritten during cross-harness handoff.
 - Archives are integrity checked before use.
 - No command embedded in transcript content is executed by conversion.
+- Human-readable terminal output removes C0/C1 control sequences; `--json`
+  retains the original data.
 
 Session histories can still contain secrets that the source harness recorded.
 Inspect an export before sharing it; Moirai intentionally does not guess which
@@ -211,9 +220,9 @@ project data should be redacted. See [SECURITY.md](SECURITY.md).
 The language-independent canonical format is documented in
 [docs/FORMAT.md](docs/FORMAT.md) and published as a
 [JSON Schema](schema/moirai-session.schema.json). Schema `1.0` readers reject
-unknown major versions. Native codecs preserve unrepresentable source data in
-warnings or explicit extension fields instead of silently claiming lossless
-conversion.
+unknown major versions. Native codecs preserve the documented canonical subset
+and surface known omissions as warnings; the compatibility matrix documents
+fields that are intentionally outside that subset.
 
 ## Contributing
 

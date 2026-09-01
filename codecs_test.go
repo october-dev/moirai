@@ -1,6 +1,8 @@
 package moirai
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,6 +18,46 @@ func nativeFixture(t *testing.T) *Transcript {
 			{Role: RoleUser, Timestamp: "2026-08-10T20:05:52Z", Content: []Block{{Type: BlockToolResult, ToolUseID: "call-1", Content: rawJSON("ok")}}},
 			{Role: RoleAssistant, Timestamp: "2026-08-10T20:05:53Z", Model: "model-a", Content: []Block{{Type: BlockText, Text: "All green."}}, StopReason: "end_turn"},
 		},
+	}
+}
+
+func TestNativeShapedReaderFixtures(t *testing.T) {
+	fixtures := []struct {
+		name  string
+		codec Codec
+		text  string
+	}{
+		{"simple.json", SimpleCodec{}, "native fixture"},
+		{"claude_code.jsonl", ClaudeCodeCodec{}, "native fixture"},
+		{"codex.jsonl", CodexCodec{}, "native fixture"},
+		{"pi.jsonl", NewPiCodec(FormatPi, "pi"), "native fixture"},
+		{"campfire.jsonl", NewPiCodec(FormatCampfire, "Campfire"), "native fixture"},
+		{"amp.json", AmpCodec{}, "native fixture"},
+		{"opencode.json", OpenCodeCodec{}, "native fixture"},
+		{"cursor.json", CursorCodec{}, "native fixture"},
+		{"cursor_desktop.json", CursorDesktopCodec{}, "native fixture"},
+		{"grok.json", GrokCodec{}, "native fixture"},
+		{"hermes.json", HermesCodec{}, "native fixture"},
+		{"antigravity.json", AntigravityCodec{}, "café"},
+		{"cowork.json", CoworkCodec{}, "native fixture"},
+		{"fx.json", FXCodec{}, "native fixture"},
+		{"claude_chat.json", ClaudeChatCodec{}, "native fixture"},
+		{"chatgpt.json", ChatGPTCodec{}, "native fixture"},
+	}
+	for _, fixture := range fixtures {
+		t.Run(string(fixture.codec.Format()), func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join("testdata", "native", fixture.name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := fixture.codec.Parse(data, ParseOptions{Limits: DefaultLimits(), SourceID: "native-fixture"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(parsed.Transcript.Messages) == 0 || !strings.Contains(ToText(parsed.Transcript, TextOptions{MaxBytes: 1 << 20}), fixture.text) {
+				t.Fatalf("fixture did not produce portable content: %#v", parsed.Transcript)
+			}
+		})
 	}
 }
 

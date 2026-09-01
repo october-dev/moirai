@@ -77,6 +77,14 @@ func (r *StoreRegistry) Store(format Format) (Store, error) {
 }
 
 func (r *StoreRegistry) Discover(ctx context.Context, formats ...Format) ([]SessionRef, []Warning, error) {
+	return r.DiscoverWithLimits(ctx, DefaultStoreLimits(), formats...)
+}
+
+type limitedDiscoverer interface {
+	DiscoverWithLimits(context.Context, Limits) ([]SessionRef, error)
+}
+
+func (r *StoreRegistry) DiscoverWithLimits(ctx context.Context, limits Limits, formats ...Format) ([]SessionRef, []Warning, error) {
 	selected := make(map[Format]bool)
 	for _, format := range formats {
 		selected[format] = true
@@ -91,12 +99,23 @@ func (r *StoreRegistry) Discover(ctx context.Context, formats ...Format) ([]Sess
 		if err != nil {
 			continue
 		}
-		found, err := store.Discover(ctx)
-		if err != nil {
-			warnings = append(warnings, Warning{Path: store.Root(), Code: "store_unavailable", Message: err.Error()})
-			continue
+		var found []SessionRef
+		if limited, ok := store.(limitedDiscoverer); ok {
+			found, err = limited.DiscoverWithLimits(ctx, limits)
+		} else {
+			found, err = store.Discover(ctx)
 		}
 		refs = append(refs, found...)
+		if err != nil {
+			warning := Warning{Path: store.Root(), Code: "store_unavailable", Message: err.Error()}
+			var discoveryErr *DiscoveryError
+			if errors.As(err, &discoveryErr) {
+				warning.Path = discoveryErr.Path
+				warning.Code = discoveryErr.Code
+			}
+			warnings = append(warnings, warning)
+			continue
+		}
 	}
 	sort.SliceStable(refs, func(i, j int) bool {
 		return firstNonEmpty(refs[i].ModifiedAt, refs[i].Timestamp) > firstNonEmpty(refs[j].ModifiedAt, refs[j].Timestamp)
@@ -105,23 +124,52 @@ func (r *StoreRegistry) Discover(ctx context.Context, formats ...Format) ([]Sess
 }
 
 func FindSession(refs []SessionRef, selector string, format Format) (SessionRef, error) {
-	var match *SessionRef
-	for i := range refs {
-		if format != "" && refs[i].Format != format {
+	groups := [][]SessionRef{{}, {}, {}, {}, {}}
+	for _, ref := range refs {
+		if format != "" && ref.Format != format {
 			continue
 		}
-		if refs[i].ID == selector || refs[i].Location == selector {
-			if match != nil {
-				return SessionRef{}, fmt.Errorf("%w: selector is ambiguous", ErrInvalidTranscript)
-			}
-			candidate := refs[i]
-			match = &candidate
+		switch {
+		case ref.Location == selector:
+			groups[0] = append(groups[0], ref)
+		case ref.ID == selector:
+			groups[1] = append(groups[1], ref)
+		case ref.Title != "" && ref.Title == selector:
+			groups[2] = append(groups[2], ref)
+		case strings.HasPrefix(ref.ID, selector):
+			groups[3] = append(groups[3], ref)
+		case ref.Title != "" && strings.HasPrefix(ref.Title, selector):
+			groups[4] = append(groups[4], ref)
 		}
 	}
-	if match == nil {
-		return SessionRef{}, ErrSessionNotFound
+	for _, matches := range groups {
+		if len(matches) == 0 {
+			continue
+		}
+		if len(matches) == 1 {
+			return matches[0], nil
+		}
+		bestDepth := int(^uint(0) >> 1)
+		var best []SessionRef
+		for _, candidate := range matches {
+			depth := len(strings.FieldsFunc(filepath.Clean(candidate.Location), func(r rune) bool { return r == '/' || r == '\\' }))
+			if depth < bestDepth {
+				bestDepth, best = depth, []SessionRef{candidate}
+			} else if depth == bestDepth {
+				best = append(best, candidate)
+			}
+		}
+		if len(best) == 1 {
+			return best[0], nil
+		}
+		locations := make([]string, 0, len(matches))
+		for _, candidate := range matches {
+			locations = append(locations, candidate.Location)
+		}
+		sort.Strings(locations)
+		return SessionRef{}, fmt.Errorf("%w: selector is ambiguous; candidates: %s", ErrInvalidTranscript, strings.Join(locations, ", "))
 	}
-	return *match, nil
+	return SessionRef{}, ErrSessionNotFound
 }
 
 func checkedPath(root, location string, mustExist bool) (string, error) {
@@ -194,6 +242,56 @@ func atomicWrite(path string, data []byte, mode fs.FileMode) error {
 		return err
 	}
 	return os.Rename(tempName, path)
+}
+
+func atomicWriteExclusive(path string, data []byte, mode fs.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(dir, ".moirai-write-*")
+	if err != nil {
+		return err
+	}
+	tempName := temp.Name()
+	defer os.Remove(tempName)
+	if err := temp.Chmod(mode); err != nil {
+		temp.Close()
+		return err
+	}
+	if _, err := temp.Write(data); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(tempName, path); errors.Is(err, fs.ErrExist) {
+		return ErrSessionExists
+	} else if err != nil {
+		return err
+	}
+	return nil
+}
+
+func reservePath(path string) (func(), error) {
+	lock := path + ".moirai-create"
+	file, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if errors.Is(err, fs.ErrExist) {
+		return nil, ErrSessionExists
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := file.Close(); err != nil {
+		os.Remove(lock)
+		return nil, err
+	}
+	return func() { _ = os.Remove(lock) }, nil
 }
 
 func readFileLimited(path string, maximum int64) ([]byte, error) {

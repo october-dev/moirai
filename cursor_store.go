@@ -44,13 +44,29 @@ func (s *CursorStore) Discover(ctx context.Context) ([]SessionRef, error) {
 				continue
 			}
 			ref := SessionRef{Format: FormatCursor, ID: session.Name(), Location: filepath.Join(workspace.Name(), session.Name(), "store.db")}
-			parsed, loadErr := s.Load(ctx, ref, ParseOptions{Limits: DefaultLimits()})
-			if loadErr != nil {
+			db, openErr := openSQLite(dbPath, true)
+			if openErr != nil {
 				continue
 			}
+			rows, queryErr := queryObjects(ctx, db, `SELECT value FROM meta WHERE key = '0'`)
+			db.Close()
+			if queryErr != nil || len(rows) == 0 {
+				continue
+			}
+			value := fmt.Sprint(rows[0]["value"])
+			var native map[string]any
+			if json.Unmarshal([]byte(value), &native) != nil {
+				if decoded, decodeErr := hex.DecodeString(value); decodeErr != nil || json.Unmarshal(decoded, &native) != nil {
+					continue
+				}
+			}
 			info, _ := os.Stat(dbPath)
-			meta := parsed.Transcript.Meta
-			ref.ID, ref.Title, ref.CWD, ref.Model, ref.Timestamp, ref.ModifiedAt = meta.ID, meta.Title, meta.CWD, meta.Model, meta.Timestamp, fileModified(info)
+			ref.ID = firstNonEmpty(stringValue(native["agentId"]), ref.ID)
+			ref.Title = stringValue(native["name"])
+			ref.CWD = stringValue(native["workspacePath"])
+			ref.Model = stringValue(native["lastUsedModel"])
+			ref.Timestamp = timestampValue(native["createdAt"])
+			ref.ModifiedAt = fileModified(info)
 			refs = append(refs, ref)
 		}
 	}
@@ -120,6 +136,16 @@ func (s *CursorStore) Save(ctx context.Context, transcript *Transcript, opts Ren
 		return nil, ErrSessionExists
 	}
 	if err := os.MkdirAll(workspaceDir, 0o700); err != nil {
+		return nil, err
+	}
+	release, err := reservePath(target)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if _, err := os.Stat(target); err == nil {
+		return nil, ErrSessionExists
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	stage, err := os.MkdirTemp(workspaceDir, ".moirai-cursor-*")

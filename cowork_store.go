@@ -73,13 +73,21 @@ func (s *CoworkStore) Discover(ctx context.Context) ([]SessionRef, error) {
 				continue
 			}
 			ref := SessionRef{Format: FormatCowork, ID: strings.TrimSuffix(filepath.Base(record), ".json"), Location: rel}
-			parsed, err := s.Load(ctx, ref, ParseOptions{Limits: DefaultLimits()})
-			if err != nil {
+			data, readErr := readFileLimited(record, int64(DefaultLimits().MaxMetadataBytes))
+			if readErr != nil {
+				continue
+			}
+			var header map[string]any
+			if decodeJSONDocument(data, &header, DefaultLimits()) != nil {
 				continue
 			}
 			info, _ := os.Stat(record)
-			meta := parsed.Transcript.Meta
-			ref.ID, ref.Title, ref.CWD, ref.Model, ref.Timestamp, ref.ModifiedAt = meta.ID, meta.Title, meta.CWD, meta.Model, meta.Timestamp, fileModified(info)
+			ref.ID = firstNonEmpty(stringValue(header["sessionId"]), ref.ID)
+			ref.Title = stringValue(header["title"])
+			ref.CWD = stringValue(header["cwd"])
+			ref.Model = stringValue(header["model"])
+			ref.Timestamp = timestampValue(header["createdAt"])
+			ref.ModifiedAt = fileModified(info)
 			refs = append(refs, ref)
 		}
 	}
@@ -185,12 +193,22 @@ func (s *CoworkStore) Save(ctx context.Context, transcript *Transcript, opts Ren
 	if _, err := os.Stat(record); err == nil {
 		return nil, ErrSessionExists
 	}
+	release, err := reservePath(record)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if _, err := os.Stat(record); err == nil {
+		return nil, ErrSessionExists
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
 	stage, err := os.MkdirTemp(account, ".moirai-cowork-*")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(stage)
-	project := filepath.Join(stage, ".claude", "projects", encodeWorkspace(stringValue(header["cwd"])))
+	project := filepath.Join(stage, ".claude", "projects", encodeClaudeProject(stringValue(header["cwd"])))
 	if err := os.MkdirAll(project, 0o700); err != nil {
 		return nil, err
 	}

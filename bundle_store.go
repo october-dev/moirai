@@ -37,12 +37,18 @@ func (s *BundleStore) Format() Format { return s.format }
 func (s *BundleStore) Root() string   { return s.root }
 
 func (s *BundleStore) Discover(ctx context.Context) ([]SessionRef, error) {
+	return s.DiscoverWithLimits(ctx, DefaultStoreLimits())
+}
+
+func (s *BundleStore) DiscoverWithLimits(ctx context.Context, limits Limits) ([]SessionRef, error) {
 	if _, err := os.Stat(s.root); errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
+	limits = limits.normalized()
 	var refs []SessionRef
+	var skippedOversize []string
 	err := filepath.WalkDir(s.root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
@@ -59,11 +65,15 @@ func (s *BundleStore) Discover(ctx context.Context) ([]SessionRef, error) {
 		if path == s.root || !s.match(path) {
 			return nil
 		}
-		data, err := s.read(path, DefaultLimits())
+		data, err := s.read(path, limits)
 		if err != nil {
+			if errors.Is(err, ErrLimitExceeded) {
+				rel, _ := filepath.Rel(s.root, path)
+				skippedOversize = append(skippedOversize, rel)
+			}
 			return filepath.SkipDir
 		}
-		parsed, err := s.codec.Parse(data, ParseOptions{Limits: DefaultLimits(), SourceID: filepath.Base(path)})
+		parsed, err := s.codec.Parse(data, ParseOptions{Limits: limits, SourceID: filepath.Base(path)})
 		if err != nil {
 			return filepath.SkipDir
 		}
@@ -76,13 +86,20 @@ func (s *BundleStore) Discover(ctx context.Context) ([]SessionRef, error) {
 		refs = append(refs, SessionRef{Format: s.format, ID: meta.ID, Location: rel, Title: meta.Title, CWD: meta.CWD, Model: meta.Model, Timestamp: meta.Timestamp, ModifiedAt: fileModified(info)})
 		return filepath.SkipDir
 	})
-	return refs, err
+	if err != nil {
+		return refs, err
+	}
+	if len(skippedOversize) > 0 {
+		return refs, &DiscoveryError{Code: "skipped_oversize", Path: skippedOversize[0], Count: len(skippedOversize), Err: ErrLimitExceeded}
+	}
+	return refs, nil
 }
 
 func (s *BundleStore) Load(ctx context.Context, ref SessionRef, opts ParseOptions) (*ParseResult, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	opts.Limits = opts.Limits.storeNormalized()
 	path, err := checkedPath(s.root, ref.Location, true)
 	if err != nil {
 		return nil, &PathError{Path: ref.Location, Err: err}
@@ -130,6 +147,16 @@ func (s *BundleStore) Save(ctx context.Context, transcript *Transcript, opts Ren
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+		return nil, err
+	}
+	release, err := reservePath(target)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	if _, err := os.Stat(target); err == nil {
+		return nil, ErrSessionExists
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return nil, err
 	}
 	stage, err := os.MkdirTemp(filepath.Dir(target), ".moirai-stage-*")

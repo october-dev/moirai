@@ -29,14 +29,22 @@ func ParseSelector(value string) (Selector, error) {
 		return Selector{}, fmt.Errorf("%w: invalid selector", ErrInvalidTranscript)
 	}
 	startText, endText, hasEnd := strings.Cut(suffix, "-")
-	start, err := strconv.Atoi(startText)
-	if err != nil || start < 1 {
+	start := 1
+	var err error
+	if startText != "" {
+		start, err = strconv.Atoi(startText)
+	}
+	if err != nil || start < 1 || startText == "" && !hasEnd {
 		return Selector{}, fmt.Errorf("%w: invalid range start", ErrInvalidTranscript)
 	}
 	end := start
 	if hasEnd {
-		end, err = strconv.Atoi(endText)
-		if err != nil || end < start {
+		if endText == "" {
+			end = 0
+		} else {
+			end, err = strconv.Atoi(endText)
+		}
+		if err != nil || end != 0 && end < start {
 			return Selector{}, fmt.Errorf("%w: invalid range end", ErrInvalidTranscript)
 		}
 	}
@@ -44,10 +52,20 @@ func ParseSelector(value string) (Selector, error) {
 }
 
 func Select(t *Transcript, span Span) (*Transcript, error) {
-	if t == nil || span.Start < 1 || span.End < span.Start || span.End > len(t.Messages) {
+	if t == nil {
+		return nil, fmt.Errorf("%w: range outside transcript", ErrInvalidTranscript)
+	}
+	if span.End == 0 {
+		span.End = len(t.Messages)
+	}
+	if span.Start < 1 || span.End < span.Start || span.End > len(t.Messages) {
 		return nil, fmt.Errorf("%w: range outside transcript", ErrInvalidTranscript)
 	}
 	start, end := span.Start-1, span.End
+	first := t.Messages[start]
+	if first.Role != RoleUser || !hasNonToolContent(first) {
+		return nil, fmt.Errorf("%w: range must start on a user message with portable content", ErrInvalidTranscript)
+	}
 	selectedUses := map[string]struct{}{}
 	selectedResults := map[string]struct{}{}
 	allUses := map[string]int{}
@@ -71,7 +89,11 @@ func Select(t *Transcript, span Span) (*Transcript, error) {
 		}
 	}
 	for id := range selectedUses {
-		if resultAt, exists := allResults[id]; exists && (resultAt < start || resultAt >= end) {
+		resultAt, exists := allResults[id]
+		if !exists {
+			return nil, fmt.Errorf("%w: range ends with unanswered tool call %q", ErrInvalidTranscript, id)
+		}
+		if resultAt < start || resultAt >= end {
 			return nil, fmt.Errorf("%w: range separates tool call %q from its result", ErrInvalidTranscript, id)
 		}
 	}
@@ -93,4 +115,13 @@ func Select(t *Transcript, span Span) (*Transcript, error) {
 	}
 	copyTranscript.Meta.ID = id
 	return &copyTranscript, nil
+}
+
+func hasNonToolContent(message Message) bool {
+	for _, block := range message.Content {
+		if block.Type != BlockToolUse && block.Type != BlockToolResult {
+			return true
+		}
+	}
+	return false
 }

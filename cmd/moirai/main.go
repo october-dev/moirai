@@ -15,7 +15,7 @@ import (
 	moirai "github.com/october-dev/moirai"
 )
 
-const version = "0.1.0"
+const version = "0.1.1"
 
 type app struct {
 	out io.Writer
@@ -25,7 +25,7 @@ type app struct {
 func main() {
 	a := app{out: os.Stdout, err: os.Stderr}
 	if err := a.run(context.Background(), os.Args[1:]); err != nil {
-		fmt.Fprintln(a.err, "moirai:", err)
+		fmt.Fprintln(a.err, "moirai:", moirai.ScrubTerminal(err.Error()))
 		os.Exit(1)
 	}
 }
@@ -163,13 +163,15 @@ func (a app) inspect(args []string) error {
 	fs := newFlags("inspect", a.err)
 	from := fs.String("from", "", "source format")
 	asJSON := fs.Bool("json", false, "emit JSON")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum input bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 {
 		return errors.New("inspect requires one input")
 	}
-	parsed, format, err := parseFile(fs.Arg(0), moirai.Format(*from))
+	limits := inputLimits(*maxInput)
+	parsed, format, err := parseFile(fs.Arg(0), moirai.Format(*from), limits)
 	if err != nil {
 		return err
 	}
@@ -182,12 +184,12 @@ func (a app) inspect(args []string) error {
 	if *asJSON {
 		return writeJSON(a.out, result)
 	}
-	fmt.Fprintf(a.out, "Format: %s\nID: %s\nMessages: %d\n", format, result.Meta.ID, result.Messages)
+	fmt.Fprintf(a.out, "Format: %s\nID: %s\nMessages: %d\n", format, moirai.ScrubTerminal(result.Meta.ID), result.Messages)
 	if result.Meta.Title != "" {
-		fmt.Fprintln(a.out, "Title:", result.Meta.Title)
+		fmt.Fprintln(a.out, "Title:", moirai.ScrubTerminal(result.Meta.Title))
 	}
 	if result.Meta.CWD != "" {
-		fmt.Fprintln(a.out, "Working directory:", result.Meta.CWD)
+		fmt.Fprintln(a.out, "Working directory:", moirai.ScrubTerminal(result.Meta.CWD))
 	}
 	return nil
 }
@@ -197,24 +199,26 @@ func (a app) convert(args []string) error {
 	from := fs.String("from", "", "source format")
 	to := fs.String("to", "", "target format")
 	out := fs.String("out", "-", "output path")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum input bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 || *to == "" {
 		return errors.New("convert requires one input and --to")
 	}
-	data, err := readInput(fs.Arg(0))
+	limits := inputLimits(*maxInput)
+	data, err := readInput(fs.Arg(0), limits.MaxInputBytes)
 	if err != nil {
 		return err
 	}
 	format := moirai.Format(*from)
 	if format == "" {
-		format, err = moirai.DetectFormat(data)
+		format, err = moirai.DetectFormatWithLimits(data, limits)
 		if err != nil {
 			return err
 		}
 	}
-	result, err := moirai.DefaultRegistry.Convert(data, format, moirai.Format(*to), moirai.ParseOptions{Limits: moirai.DefaultLimits()})
+	result, err := moirai.DefaultRegistry.Convert(data, format, moirai.Format(*to), moirai.ParseOptions{Limits: limits})
 	if err != nil {
 		return err
 	}
@@ -228,6 +232,7 @@ func (a app) list(ctx context.Context, args []string) error {
 	fs := newFlags("list", a.err)
 	format := fs.String("format", "", "filter format")
 	asJSON := fs.Bool("json", false, "emit JSON")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum bytes per stored session")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -239,7 +244,8 @@ func (a app) list(ctx context.Context, args []string) error {
 	if *format != "" {
 		formats = []moirai.Format{moirai.Format(*format)}
 	}
-	refs, warnings, err := registry.Discover(ctx, formats...)
+	limits := storeLimits(*maxInput)
+	refs, warnings, err := registry.DiscoverWithLimits(ctx, limits, formats...)
 	if err != nil {
 		return err
 	}
@@ -247,10 +253,10 @@ func (a app) list(ctx context.Context, args []string) error {
 		return writeJSON(a.out, map[string]any{"sessions": refs, "warnings": warnings})
 	}
 	for _, ref := range refs {
-		fmt.Fprintf(a.out, "%-14s %-38s %s\n", ref.Format, ref.ID, first(ref.Title, ref.CWD, ref.Timestamp))
+		fmt.Fprintf(a.out, "%-14s %-38s %s\n", ref.Format, moirai.ScrubTerminal(ref.ID), moirai.ScrubTerminal(first(ref.Title, ref.CWD, ref.Timestamp)))
 	}
 	for _, warning := range warnings {
-		fmt.Fprintln(a.err, "warning:", warning.Message)
+		fmt.Fprintln(a.err, "warning:", moirai.ScrubTerminal(warning.Message))
 	}
 	return nil
 }
@@ -261,13 +267,14 @@ func (a app) show(ctx context.Context, args []string) error {
 	asJSON := fs.Bool("json", false, "emit canonical JSON")
 	includeThinking := fs.Bool("thinking", false, "include reasoning in text")
 	includeTools := fs.Bool("tools", true, "include tools in text")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum stored session bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 || *format == "" {
 		return errors.New("show requires a session id and --format")
 	}
-	parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*format))
+	parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*format), storeLimits(*maxInput))
 	if err != nil {
 		return err
 	}
@@ -275,7 +282,7 @@ func (a app) show(ctx context.Context, args []string) error {
 	if *asJSON {
 		return writeJSON(a.out, parsed.Transcript)
 	}
-	fmt.Fprintln(a.out, moirai.ToText(parsed.Transcript, moirai.TextOptions{IncludeMetadata: true, IncludeThinking: *includeThinking, IncludeTools: *includeTools, MaxBytes: 1 << 20}))
+	fmt.Fprintln(a.out, moirai.ScrubTerminal(moirai.ToText(parsed.Transcript, moirai.TextOptions{IncludeMetadata: true, IncludeThinking: *includeThinking, IncludeTools: *includeTools, MaxBytes: 1 << 20})))
 	return nil
 }
 
@@ -284,6 +291,7 @@ func (a app) search(ctx context.Context, args []string) error {
 	format := fs.String("format", "", "filter format")
 	limit := fs.Int("limit", 20, "maximum hits")
 	asJSON := fs.Bool("json", false, "emit JSON")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum bytes per stored session")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -298,7 +306,8 @@ func (a app) search(ctx context.Context, args []string) error {
 	if *format != "" {
 		formats = []moirai.Format{moirai.Format(*format)}
 	}
-	refs, _, err := registry.Discover(ctx, formats...)
+	limits := storeLimits(*maxInput)
+	refs, _, err := registry.DiscoverWithLimits(ctx, limits, formats...)
 	if err != nil {
 		return err
 	}
@@ -309,7 +318,7 @@ func (a app) search(ctx context.Context, args []string) error {
 	var hits []sessionHit
 	for _, ref := range refs {
 		store, _ := registry.Store(ref.Format)
-		parsed, loadErr := store.Load(ctx, ref, moirai.ParseOptions{Limits: moirai.DefaultLimits()})
+		parsed, loadErr := store.Load(ctx, ref, moirai.ParseOptions{Limits: limits})
 		if loadErr != nil {
 			continue
 		}
@@ -327,7 +336,7 @@ func (a app) search(ctx context.Context, args []string) error {
 		return writeJSON(a.out, hits)
 	}
 	for _, hit := range hits {
-		fmt.Fprintf(a.out, "%s:%s#%d %s\n", hit.Session.Format, hit.Session.ID, hit.Hit.MessageIndex, hit.Hit.Text)
+		fmt.Fprintf(a.out, "%s:%s#%d %s\n", hit.Session.Format, moirai.ScrubTerminal(hit.Session.ID), hit.Hit.MessageIndex, moirai.ScrubTerminal(hit.Hit.Text))
 	}
 	return nil
 }
@@ -336,18 +345,20 @@ func (a app) export(ctx context.Context, args []string) error {
 	fs := newFlags("export", a.err)
 	format := fs.String("format", "", "session format")
 	out := fs.String("out", "-", "output path")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum stored session bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() != 1 || *format == "" {
 		return errors.New("export requires a session id and --format")
 	}
-	parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*format))
+	limits := storeLimits(*maxInput)
+	parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*format), limits)
 	if err != nil {
 		return err
 	}
 	a.printWarnings(parsed.Warnings)
-	rendered, err := (moirai.SimpleCodec{}).Render(parsed.Transcript, moirai.RenderOptions{Limits: moirai.DefaultLimits()})
+	rendered, err := (moirai.SimpleCodec{}).Render(parsed.Transcript, moirai.RenderOptions{Limits: limits})
 	if err != nil {
 		return err
 	}
@@ -364,6 +375,7 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	to := fs.String("to", "", "target format")
 	with := fs.String("with", "", "target harness")
 	noLaunch := fs.Bool("no-launch", false, "save without starting the target harness")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum input or stored session bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -377,11 +389,20 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	if target == "" {
 		return errors.New("target format is required")
 	}
+	if continuing && !*noLaunch {
+		codec, err := moirai.DefaultRegistry.Codec(moirai.Format(target))
+		if err != nil {
+			return err
+		}
+		if !codec.Info().Capability.Continue {
+			return fmt.Errorf("%w: %s can be imported but cannot be launched into a specific session", moirai.ErrUnsupported, target)
+		}
+	}
 	var transcript *moirai.Transcript
 	var warnings []moirai.Warning
 	var sourceFormat moirai.Format
 	if *from != "" && !isInputFile(fs.Arg(0)) {
-		parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*from))
+		parsed, err := loadStored(ctx, fs.Arg(0), moirai.Format(*from), storeLimits(*maxInput))
 		if err != nil {
 			return err
 		}
@@ -389,7 +410,7 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 		warnings = append(warnings, parsed.Warnings...)
 		sourceFormat = moirai.Format(*from)
 	} else {
-		parsed, detected, err := parseFile(fs.Arg(0), moirai.Format(*from))
+		parsed, detected, err := parseFile(fs.Arg(0), moirai.Format(*from), inputLimits(*maxInput))
 		if err != nil {
 			return err
 		}
@@ -410,6 +431,16 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	provenance.SourceFormat = sourceFormat
 	provenance.SourceSessionID = transcript.Meta.ID
 	provenance.ImportedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if info, statErr := os.Stat(copy.Meta.CWD); copy.Meta.CWD == "" || statErr != nil || !info.IsDir() {
+		original := copy.Meta.CWD
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			return cwdErr
+		}
+		provenance.SourceCWD = original
+		copy.Meta.CWD = cwd
+		warnings = append(warnings, moirai.Warning{Code: "cwd_rehomed", Message: fmt.Sprintf("source working directory %q is unavailable; using %q", original, cwd)})
+	}
 	copy.Meta.Provenance = &provenance
 	copy.Meta.ID = id
 	registry, err := stores()
@@ -420,7 +451,7 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	if err != nil {
 		return err
 	}
-	saved, err := store.Save(ctx, &copy, moirai.RenderOptions{Limits: moirai.DefaultLimits(), ID: id})
+	saved, err := store.Save(ctx, &copy, moirai.RenderOptions{Limits: storeLimits(*maxInput), ID: id})
 	if err != nil {
 		return err
 	}
@@ -441,6 +472,7 @@ func (a app) delete(ctx context.Context, args []string) error {
 	fs := newFlags("delete", a.err)
 	format := fs.String("format", "", "session format")
 	yes := fs.Bool("yes", false, "confirm deletion")
+	maxInput := fs.Int64("max-input-bytes", 0, "maximum stored session bytes")
 	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
@@ -455,7 +487,7 @@ func (a app) delete(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	refs, err := store.Discover(ctx)
+	refs, _, err := registry.DiscoverWithLimits(ctx, storeLimits(*maxInput), moirai.Format(*format))
 	if err != nil {
 		return err
 	}
@@ -475,35 +507,39 @@ func (a app) archive(args []string) error {
 		fs := newFlags("archive create", a.err)
 		from := fs.String("from", "", "source format")
 		out := fs.String("out", "", "archive path")
+		maxInput := fs.Int64("max-input-bytes", 0, "maximum input bytes")
 		if err := parseFlags(fs, args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 || *out == "" {
 			return errors.New("archive create requires one input and --out")
 		}
-		parsed, _, err := parseFile(fs.Arg(0), moirai.Format(*from))
+		limits := inputLimits(*maxInput)
+		parsed, _, err := parseFile(fs.Arg(0), moirai.Format(*from), limits)
 		if err != nil {
 			return err
 		}
 		a.printWarnings(parsed.Warnings)
-		encoded, err := moirai.EncodeArchive(parsed.Transcript, moirai.DefaultLimits())
+		encoded, err := moirai.EncodeArchive(parsed.Transcript, limits)
 		if err != nil {
 			return err
 		}
 		return writeOutput(*out, encoded, a.out)
 	case "verify":
 		fs := newFlags("archive verify", a.err)
+		maxInput := fs.Int64("max-input-bytes", 0, "maximum archive bytes")
 		if err := parseFlags(fs, args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 {
 			return errors.New("archive verify requires one archive")
 		}
-		data, err := readInput(fs.Arg(0))
+		limits := inputLimits(*maxInput)
+		data, err := readInput(fs.Arg(0), limits.MaxInputBytes)
 		if err != nil {
 			return err
 		}
-		transcript, err := moirai.DecodeArchive(data, moirai.DefaultLimits())
+		transcript, err := moirai.DecodeArchive(data, limits)
 		if err != nil {
 			return err
 		}
@@ -513,7 +549,7 @@ func (a app) archive(args []string) error {
 	}
 }
 
-func loadStored(ctx context.Context, selector string, format moirai.Format) (*moirai.ParseResult, error) {
+func loadStored(ctx context.Context, selector string, format moirai.Format, limits moirai.Limits) (*moirai.ParseResult, error) {
 	parsedSelector, err := moirai.ParseSelector(selector)
 	if err != nil {
 		return nil, err
@@ -526,7 +562,7 @@ func loadStored(ctx context.Context, selector string, format moirai.Format) (*mo
 	if err != nil {
 		return nil, err
 	}
-	refs, err := store.Discover(ctx)
+	refs, _, err := registry.DiscoverWithLimits(ctx, limits, format)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +570,7 @@ func loadStored(ctx context.Context, selector string, format moirai.Format) (*mo
 	if err != nil {
 		return nil, err
 	}
-	parsed, err := store.Load(ctx, ref, moirai.ParseOptions{Limits: moirai.DefaultLimits()})
+	parsed, err := store.Load(ctx, ref, moirai.ParseOptions{Limits: limits})
 	if err != nil || parsedSelector.Span == nil {
 		return parsed, err
 	}
@@ -546,15 +582,15 @@ func loadStored(ctx context.Context, selector string, format moirai.Format) (*mo
 	return parsed, nil
 }
 
-func parseFile(path string, format moirai.Format) (*moirai.ParseResult, moirai.Format, error) {
-	data, err := readInput(path)
+func parseFile(path string, format moirai.Format, limits moirai.Limits) (*moirai.ParseResult, moirai.Format, error) {
+	data, err := readInput(path, limits.MaxInputBytes)
 	if err != nil {
 		return nil, "", err
 	}
-	return moirai.Parse(data, format, moirai.ParseOptions{Limits: moirai.DefaultLimits(), SourceID: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))})
+	return moirai.Parse(data, format, moirai.ParseOptions{Limits: limits, SourceID: strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))})
 }
 
-func readInput(path string) ([]byte, error) {
+func readInput(path string, limit int64) ([]byte, error) {
 	var reader io.Reader
 	if path == "-" {
 		reader = os.Stdin
@@ -566,7 +602,9 @@ func readInput(path string) ([]byte, error) {
 		defer file.Close()
 		reader = file
 	}
-	limit := moirai.DefaultLimits().MaxInputBytes
+	if limit <= 0 {
+		limit = moirai.DefaultLimits().MaxInputBytes
+	}
 	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil {
 		return nil, err
@@ -618,8 +656,24 @@ func (a app) printWarnings(warnings []moirai.Warning) {
 		if location != "" {
 			location += ": "
 		}
-		fmt.Fprintf(a.err, "warning: %s%s (%s)\n", location, warning.Message, warning.Code)
+		fmt.Fprintf(a.err, "warning: %s%s (%s)\n", moirai.ScrubTerminal(location), moirai.ScrubTerminal(warning.Message), moirai.ScrubTerminal(warning.Code))
 	}
+}
+
+func inputLimits(maximum int64) moirai.Limits {
+	limits := moirai.DefaultLimits()
+	if maximum > 0 {
+		limits.MaxInputBytes = maximum
+	}
+	return limits
+}
+
+func storeLimits(maximum int64) moirai.Limits {
+	limits := moirai.DefaultStoreLimits()
+	if maximum > 0 {
+		limits.MaxInputBytes = maximum
+	}
+	return limits
 }
 
 func first(values ...string) string {

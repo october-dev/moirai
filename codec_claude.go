@@ -1,6 +1,9 @@
 package moirai
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type ClaudeCodeCodec struct{}
 
@@ -16,6 +19,8 @@ func (ClaudeCodeCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, erro
 	}
 	t := &Transcript{SchemaVersion: SchemaVersion}
 	var pending []string
+	omittedKinds := map[string]bool{}
+	omittedFields := false
 	for _, record := range records {
 		kind := stringValue(record["type"])
 		if kind == "summary" {
@@ -23,7 +28,19 @@ func (ClaudeCodeCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, erro
 			continue
 		}
 		if kind != "user" && kind != "assistant" {
+			if kind != "" {
+				omittedKinds[kind] = true
+			}
 			continue
+		}
+		if boolValue(record["isSidechain"]) {
+			omittedKinds["sidechain"] = true
+			continue
+		}
+		for _, field := range []string{"isMeta", "userType", "requestId", "agentId", "toolUseResult"} {
+			if record[field] != nil {
+				omittedFields = true
+			}
 		}
 		t.Meta.ID = firstNonEmpty(t.Meta.ID, stringValue(record["sessionId"]))
 		t.Meta.CWD = firstNonEmpty(t.Meta.CWD, stringValue(record["cwd"]))
@@ -44,6 +61,12 @@ func (ClaudeCodeCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, erro
 		message := Message{ID: stringValue(record["uuid"]), Role: role, Content: blocks, Timestamp: stamp, Model: stringValue(payload["model"]), StopReason: stringValue(payload["stop_reason"]), Usage: usageFromMap(payload["usage"], []string{"input_tokens"}, []string{"output_tokens"})}
 		t.Messages = append(t.Messages, message)
 		t.Meta.Model = firstNonEmpty(t.Meta.Model, message.Model)
+	}
+	for kind := range omittedKinds {
+		warnings = append(warnings, Warning{Code: "native_record_omitted", Message: fmt.Sprintf("Claude Code %s record omitted from portable context", kind)})
+	}
+	if omittedFields {
+		warnings = append(warnings, Warning{Code: "native_fields_omitted", Message: "Claude Code bookkeeping fields omitted from portable context"})
 	}
 	if len(t.Messages) == 0 {
 		return nil, fmt.Errorf("%w: no conversational records", ErrInvalidTranscript)
@@ -67,12 +90,16 @@ func (ClaudeCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult,
 	last := ""
 	for i, message := range t.Messages {
 		id := firstNonEmpty(message.ID, uuidFromSeed(sessionID, fmt.Sprint(i), string(message.Role)))
-		payload := map[string]any{"role": message.Role, "content": renderAnthropicContent(message.Content)}
+		payload := map[string]any{"role": message.Role, "content": renderClaudeContent(message.Content)}
 		if message.Role == RoleAssistant {
 			payload["id"] = "msg_" + stableID("", sessionID, fmt.Sprint(i))
 			payload["type"] = "message"
 			payload["model"] = firstNonEmpty(message.Model, t.Meta.Model, "unknown")
-			payload["stop_reason"] = firstNonEmpty(message.StopReason, "end_turn")
+			stopReason := message.StopReason
+			if stopReason == "" && hasBlockType(message, BlockToolUse) {
+				stopReason = "tool_use"
+			}
+			payload["stop_reason"] = firstNonEmpty(stopReason, "end_turn")
 			if message.Usage != nil {
 				payload["usage"] = message.Usage
 			}
@@ -89,6 +116,67 @@ func (ClaudeCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult,
 	}
 	data, err := encodeJSONLines(records)
 	return finalizeRender(t, FormatClaudeCode, &RenderResult{Data: data}, err)
+}
+
+func renderClaudeContent(blocks []Block) []any {
+	result := make([]any, 0, len(blocks))
+	for _, block := range blocks {
+		switch block.Type {
+		case BlockText:
+			result = append(result, map[string]any{"type": "text", "text": block.Text})
+		case BlockThinking:
+			switch {
+			case block.Signature != "":
+				result = append(result, map[string]any{"type": "thinking", "thinking": block.Text, "signature": block.Signature})
+			case block.Encrypted != "":
+				result = append(result, map[string]any{"type": "redacted_thinking", "data": block.Encrypted})
+			case block.Text != "":
+				result = append(result, map[string]any{"type": "text", "text": "[Reasoning]\n" + block.Text})
+			}
+		case BlockToolUse:
+			var input any
+			_ = json.Unmarshal(block.Input, &input)
+			result = append(result, map[string]any{"type": "tool_use", "id": block.ID, "name": block.Name, "input": input})
+		case BlockToolResult:
+			result = append(result, map[string]any{"type": "tool_result", "tool_use_id": block.ToolUseID, "content": claudeToolResultContent(block.Content), "is_error": block.IsError})
+		case BlockImage:
+			if block.Source != nil {
+				result = append(result, map[string]any{"type": "image", "source": block.Source})
+			}
+		}
+	}
+	return result
+}
+
+func claudeToolResultContent(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return ""
+	}
+	var value any
+	if json.Unmarshal(raw, &value) != nil {
+		return string(raw)
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	if entries, ok := value.([]any); ok {
+		valid := true
+		for _, entry := range entries {
+			kind := stringValue(object(entry)["type"])
+			if kind != "text" && kind != "image" {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			return entries
+		}
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func init() { _ = Register(ClaudeCodeCodec{}) }

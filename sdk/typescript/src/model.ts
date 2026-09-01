@@ -10,7 +10,7 @@ export type Format = (typeof FORMATS)[number];
 export type Role = "user" | "assistant";
 export type BlockType = "text" | "thinking" | "tool_use" | "tool_result" | "image" | "artifact" | "unknown";
 
-export interface MediaSource { type: string; media_type?: string; data?: string; path?: string; url?: string }
+export interface MediaSource { type: string; media_type?: string; data?: string; path?: string; url?: string; text?: string }
 export interface Artifact { id?: string; name: string; description?: string; media_type?: string; source?: MediaSource; sha256?: string }
 export interface Block {
   type: BlockType; text?: string; id?: string; name?: string; input?: unknown;
@@ -25,10 +25,12 @@ export interface Message {
 export interface Provenance {
   source_format?: Format; source_session_id?: string; imported_at?: string;
   parent_session_id?: string; parent_checkpoint?: string;
+  source_cwd?: string;
 }
 export interface Metadata {
   id: string; timestamp?: string; updated_at?: string; cwd?: string; git_branch?: string;
   title?: string; model?: string; cli_version?: string; provenance?: Provenance; extra?: unknown;
+  model_provider?: string;
 }
 export interface Transcript { schema_version: typeof SCHEMA_VERSION; meta: Metadata; messages: Message[]; extra?: unknown }
 export interface Warning { path?: string; code: string; message: string }
@@ -54,8 +56,14 @@ export function newId(): string {
 }
 
 export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_LIMITS }): void {
-  if (!transcript || transcript.schema_version !== SCHEMA_VERSION) throw new MoiraiError("unsupported_version", `schema_version must be ${SCHEMA_VERSION}`);
-  if (!transcript.meta?.id?.trim()) throw new MoiraiError("invalid_transcript", "meta.id is required");
+  if (!isRecord(transcript) || transcript.schema_version !== SCHEMA_VERSION) throw new MoiraiError("unsupported_version", `schema_version must be ${SCHEMA_VERSION}`);
+  if (!isRecord(transcript.meta) || typeof transcript.meta.id !== "string" || !transcript.meta.id.trim()) throw new MoiraiError("invalid_transcript", "meta.id is required");
+  requireOptionalStrings("meta", transcript.meta, ["timestamp", "updated_at", "cwd", "git_branch", "title", "model", "model_provider", "cli_version"]);
+  if (transcript.meta.cwd && /[\u0000-\u001f\u007f-\u009f]/u.test(transcript.meta.cwd)) throw new MoiraiError("invalid_transcript", "meta.cwd contains control characters");
+  if (transcript.meta.provenance !== undefined) {
+    if (!isRecord(transcript.meta.provenance)) throw new MoiraiError("invalid_transcript", "meta.provenance must be an object");
+    requireOptionalStrings("meta.provenance", transcript.meta.provenance, ["source_format", "source_session_id", "imported_at", "parent_session_id", "parent_checkpoint", "source_cwd"]);
+  }
   ensureNesting(transcript, limits.maxNestingDepth);
   let totalBytes = enforceStrings("meta", [transcript.meta.id, transcript.meta.timestamp, transcript.meta.updated_at, transcript.meta.cwd, transcript.meta.git_branch, transcript.meta.title, transcript.meta.model, transcript.meta.cli_version], limits.maxMetadataBytes);
   validateTime("meta.timestamp", transcript.meta.timestamp);
@@ -67,7 +75,9 @@ export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_L
   const calls = new Set<string>();
   let blockCount = 0;
   transcript.messages.forEach((message, mi) => {
+    if (!isRecord(message)) throw new MoiraiError("invalid_transcript", `messages[${mi}] must be an object`);
     if (message.role !== "user" && message.role !== "assistant") throw new MoiraiError("invalid_transcript", `messages[${mi}].role is invalid`);
+    requireOptionalStrings(`messages[${mi}]`, message, ["id", "timestamp", "model", "stop_reason"]);
     if (!Array.isArray(message.content)) throw new MoiraiError("invalid_transcript", `messages[${mi}].content must be an array`);
     validateTime(`messages[${mi}].timestamp`, message.timestamp);
     enforceJSONBytes(`messages[${mi}].extra`, message.extra, limits.maxMetadataBytes);
@@ -77,6 +87,8 @@ export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_L
     if (blockCount > limits.maxBlocks) throw new MoiraiError("limit_exceeded", "block count exceeds the safety limit");
     message.content.forEach((block, bi) => {
       const path = `messages[${mi}].content[${bi}]`;
+      if (!isRecord(block) || typeof block.type !== "string") throw new MoiraiError("invalid_transcript", `${path} must be a block object`);
+      requireOptionalStrings(path, block, ["text", "id", "name", "tool_use_id", "signature", "encrypted"]);
       if (byteLength(block.text ?? "") > limits.maxTextBytes) throw new MoiraiError("limit_exceeded", `${path}.text is too large`);
       totalBytes += blockPayloadBytes(block);
       if (totalBytes > limits.maxInputBytes) throw new MoiraiError("limit_exceeded", "aggregate transcript payload exceeds the safety limit");
@@ -97,15 +109,14 @@ export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_L
           break;
         case "image":
           if (!block.source?.type) throw new MoiraiError("invalid_transcript", `${path}.source is required`);
-          if (block.source.type === "base64" && block.source.data !== undefined) validateBase64(`${path}.source.data`, block.source.data, limits.maxInlineMediaBytes);
+          validateMedia(`${path}.source`, block.source, limits);
           break;
         case "artifact":
           if (!block.artifact?.name) throw new MoiraiError("invalid_transcript", `${path}.artifact.name is required`);
           enforceStrings(`${path}.artifact`, [block.artifact.id, block.artifact.name, block.artifact.description, block.artifact.media_type, block.artifact.sha256], limits.maxMetadataBytes);
           if (block.artifact.sha256 && !/^[0-9a-fA-F]{64}$/u.test(block.artifact.sha256)) throw new MoiraiError("invalid_transcript", `${path}.artifact.sha256 must be a SHA-256 hex digest`);
           if (block.artifact.source) {
-            if (!block.artifact.source.type) throw new MoiraiError("invalid_transcript", `${path}.artifact.source.type is required`);
-            if (block.artifact.source.type === "base64" && block.artifact.source.data !== undefined) validateBase64(`${path}.artifact.source.data`, block.artifact.source.data, limits.maxInlineMediaBytes);
+            validateMedia(`${path}.artifact.source`, block.artifact.source, limits);
           }
           break;
         case "unknown":
@@ -123,6 +134,12 @@ function validateTime(path: string, value: string | undefined): void {
     throw new MoiraiError("invalid_transcript", `${path} must be RFC 3339`);
   }
 }
+
+function requireOptionalStrings(path: string, value: Record<string, unknown>, keys: string[]): void {
+  for (const key of keys) if (value[key] !== undefined && typeof value[key] !== "string") throw new MoiraiError("invalid_transcript", `${path}.${key} must be a string`);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 
 function isRFC3339(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|([+-])(\d{2}):(\d{2}))$/u.exec(value);
@@ -176,10 +193,10 @@ function validateUsage(path: string, usage: Usage): void {
 function blockPayloadBytes(block: Block): number {
   let total = enforceStrings("block", [block.text, block.id, block.name, block.tool_use_id, block.signature, block.encrypted], Number.MAX_SAFE_INTEGER);
   total += jsonByteLength(block.input) + jsonByteLength(block.content) + jsonByteLength(block.data);
-  if (block.source) total += enforceStrings("source", [block.source.type, block.source.media_type, block.source.data, block.source.path, block.source.url], Number.MAX_SAFE_INTEGER);
+  if (block.source) total += enforceStrings("source", [block.source.type, block.source.media_type, block.source.data, block.source.path, block.source.url, block.source.text], Number.MAX_SAFE_INTEGER);
   if (block.artifact) {
     total += enforceStrings("artifact", [block.artifact.id, block.artifact.name, block.artifact.description, block.artifact.media_type, block.artifact.sha256], Number.MAX_SAFE_INTEGER);
-    if (block.artifact.source) total += enforceStrings("artifact.source", [block.artifact.source.type, block.artifact.source.media_type, block.artifact.source.data, block.artifact.source.path, block.artifact.source.url], Number.MAX_SAFE_INTEGER);
+    if (block.artifact.source) total += enforceStrings("artifact.source", [block.artifact.source.type, block.artifact.source.media_type, block.artifact.source.data, block.artifact.source.path, block.artifact.source.url, block.artifact.source.text], Number.MAX_SAFE_INTEGER);
   }
   return total;
 }
@@ -204,4 +221,19 @@ function validateBase64(path: string, value: string, maximum: number): void {
   }
   const padding = compact.endsWith("==") ? 2 : compact.endsWith("=") ? 1 : 0;
   if ((compact.length / 4) * 3 - padding > maximum) throw new MoiraiError("limit_exceeded", `${path} is too large`);
+}
+
+function validateMedia(path: string, source: MediaSource, limits: Limits): void {
+  if (!source?.type) throw new MoiraiError("invalid_transcript", `${path}.type is required`);
+  if (source.type === "base64") {
+    if (!source.data) throw new MoiraiError("invalid_transcript", `${path}.data is required`);
+    validateBase64(`${path}.data`, source.data, limits.maxInlineMediaBytes);
+  } else if (source.type === "path") {
+    if (!source.path || /[\u0000-\u001f\u007f-\u009f]/u.test(source.path)) throw new MoiraiError("invalid_transcript", `${path}.path is invalid`);
+  } else if (source.type === "url") {
+    if (!source.url) throw new MoiraiError("invalid_transcript", `${path}.url is required`);
+    try { new URL(source.url); } catch { throw new MoiraiError("invalid_transcript", `${path}.url is invalid`); }
+  } else if (source.type === "text") {
+    if (!source.text) throw new MoiraiError("invalid_transcript", `${path}.text is required`);
+  } else throw new MoiraiError("invalid_transcript", `${path}.type is unsupported`);
 }

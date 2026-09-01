@@ -42,10 +42,18 @@ test("simple codec accepts and emits canonical metadata", () => {
 
 test("selectors and ranges preserve tool boundaries", () => {
   assert.deepEqual(parseSelector("session#2-3"), { sessionId: "session", span: { start: 2, end: 3 } });
-  const selected = select(fixture(), { start: 2, end: 3 });
-  assert.equal(selected.messages.length, 2);
+  const selected = select(fixture(), { start: 1, end: 3 });
+  assert.equal(selected.messages.length, 3);
   assert.equal(selected.meta.provenance.parent_session_id, "session");
   assert.throws(() => select(fixture(), { start: 2, end: 2 }), MoiraiError);
+  assert.deepEqual(parseSelector("session#-3"), { sessionId: "session", span: { start: 1, end: 3 } });
+  assert.deepEqual(parseSelector("session#2-"), { sessionId: "session", span: { start: 2, end: 0 } });
+  assert.throws(() => parseSelector("session#0x10"), MoiraiError);
+  assert.throws(() => parseSelector("session#1e2"), MoiraiError);
+  assert.throws(() => select(fixture(), { start: 2, end: 4 }), MoiraiError);
+  const toolOnly = fixture();
+  toolOnly.messages = [{ role: "user", content: [{ type: "tool_use", id: "call", name: "Read", input: {} }] }];
+  assert.throws(() => select(toolOnly, { start: 1, end: 1 }), MoiraiError);
 });
 
 test("bounded text and fuzzy search", () => {
@@ -68,7 +76,25 @@ test("decodes the language-independent archive fixture", async () => {
   const fixture = await readFile("../../testdata/archive-v1.moirai");
   const transcript = await decodeArchive(fixture);
   assert.equal(transcript.meta.id, "interop");
-  assert.equal(transcript.messages.length, 1);
+  assert.equal(transcript.messages.length, 3);
+});
+
+test("archive shape failures are typed and unknown fields are rejected", async () => {
+  const malformed = JSON.stringify({ format: "moirai.session", version: "1", transcript: { schema_version: "1.0", meta: { id: "bad" } }, sha256: "x" });
+  await assert.rejects(() => decodeArchive(malformed), (error) => error instanceof MoiraiError && error.code === "invalid_transcript");
+  const unknown = JSON.stringify({ format: "moirai.session", version: "1", transcript: { schema_version: "1.0", meta: { id: "bad" }, messages: [], injected: true }, sha256: "x" });
+  await assert.rejects(() => decodeArchive(unknown), (error) => error instanceof MoiraiError && error.code === "invalid_transcript");
+});
+
+test("simple codec rejects malformed block field types", () => {
+  const codec = new SimpleCodec();
+  const parsed = codec.parse(JSON.stringify({ id: "bad-blocks", messages: [
+    { role: "user", content: [{ type: "text", text: 12345 }] },
+    { role: "assistant", content: [{ type: "tool_result", content: null }] },
+    { role: "user", content: "valid" },
+  ] }));
+  assert.equal(parsed.transcript.messages.length, 1);
+  assert.equal(parsed.warnings.length, 2);
 });
 
 test("limits reject deep JSON and oversized UTF-8 text", () => {

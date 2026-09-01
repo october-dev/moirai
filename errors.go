@@ -34,3 +34,19 @@ type FormatError struct {
 
 func (e *FormatError) Error() string { return fmt.Sprintf("%s %s: %v", e.Format, e.Op, e.Err) }
 func (e *FormatError) Unwrap() error { return e.Err }
+
+type DiscoveryError struct {
+	Code  string
+	Path  string
+	Count int
+	Err   error
+}
+
+func (e *DiscoveryError) Error() string {
+	if e.Count > 1 {
+		return fmt.Sprintf("%s (and %d more): %v", e.Path, e.Count-1, e.Err)
+	}
+	return fmt.Sprintf("%s: %v", e.Path, e.Err)
+}
+
+func (e *DiscoveryError) Unwrap() error { return e.Err }

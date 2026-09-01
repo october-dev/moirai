@@ -17,7 +17,7 @@ func fixtureTranscript() *Transcript {
 }
 
 func TestSelectorAndToolSafeRange(t *testing.T) {
-	selector, err := ParseSelector("session#2-3")
+	selector, err := ParseSelector("session#1-3")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,11 +25,15 @@ func TestSelectorAndToolSafeRange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(selected.Messages) != 2 || selected.Meta.Provenance.ParentSessionID != "session" {
+	if len(selected.Messages) != 3 || selected.Meta.Provenance.ParentSessionID != "session" {
 		t.Fatalf("selection = %#v", selected)
 	}
 	if _, err := Select(fixtureTranscript(), Span{Start: 2, End: 2}); !errors.Is(err, ErrInvalidTranscript) {
 		t.Fatalf("error = %v", err)
+	}
+	toolOnly := &Transcript{Messages: []Message{{Role: RoleUser, Content: []Block{{Type: BlockToolUse, ID: "call", Name: "Read"}}}}}
+	if _, err := Select(toolOnly, Span{Start: 1, End: 1}); !errors.Is(err, ErrInvalidTranscript) {
+		t.Fatalf("tool-only start error = %v", err)
 	}
 }
 
@@ -71,7 +75,7 @@ func TestArchiveV1InteroperabilityFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if transcript.Meta.ID != "interop" || len(transcript.Messages) != 1 {
+	if transcript.Meta.ID != "interop" || len(transcript.Messages) != 3 {
 		t.Fatalf("unexpected transcript: %#v", transcript)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,7 +24,13 @@ func Validate(t *Transcript, limits Limits) error {
 	if strings.TrimSpace(t.Meta.ID) == "" {
 		return fmt.Errorf("%w: meta.id is required", ErrInvalidTranscript)
 	}
-	metadataStrings := []string{t.Meta.ID, t.Meta.Timestamp, t.Meta.UpdatedAt, t.Meta.CWD, t.Meta.GitBranch, t.Meta.Title, t.Meta.Model, t.Meta.CLIVersion}
+	if strings.IndexFunc(t.Meta.CWD, unsafeControlRune) >= 0 {
+		return fmt.Errorf("%w: meta.cwd contains control characters", ErrInvalidTranscript)
+	}
+	metadataStrings := []string{t.Meta.ID, t.Meta.Timestamp, t.Meta.UpdatedAt, t.Meta.CWD, t.Meta.GitBranch, t.Meta.Title, t.Meta.Model, t.Meta.ModelProvider, t.Meta.CLIVersion}
+	if t.Meta.Provenance != nil {
+		metadataStrings = append(metadataStrings, string(t.Meta.Provenance.SourceFormat), t.Meta.Provenance.SourceSessionID, t.Meta.Provenance.ImportedAt, t.Meta.Provenance.ParentSessionID, t.Meta.Provenance.ParentCheckpoint, t.Meta.Provenance.SourceCWD)
+	}
 	var totalBytes int64
 	for _, value := range metadataStrings {
 		if len(value) > limits.MaxMetadataBytes {
@@ -194,18 +201,38 @@ func validateMediaSource(source *MediaSource, path string, limits Limits) error 
 	if source == nil || strings.TrimSpace(source.Type) == "" {
 		return fmt.Errorf("%w: %s is required", ErrInvalidTranscript, path)
 	}
-	if source.Type != "base64" {
-		return nil
-	}
-	decoded, err := base64.StdEncoding.DecodeString(source.Data)
-	if err != nil {
-		return fmt.Errorf("%w: %s.data", ErrInvalidTranscript, path)
-	}
-	if len(decoded) > limits.MaxInlineMediaBytes {
-		return fmt.Errorf("%w: %s", ErrLimitExceeded, path)
+	switch source.Type {
+	case "base64":
+		if source.Data == "" {
+			return fmt.Errorf("%w: %s.data is required", ErrInvalidTranscript, path)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(source.Data)
+		if err != nil {
+			return fmt.Errorf("%w: %s.data", ErrInvalidTranscript, path)
+		}
+		if len(decoded) > limits.MaxInlineMediaBytes {
+			return fmt.Errorf("%w: %s", ErrLimitExceeded, path)
+		}
+	case "path":
+		if source.Path == "" || strings.IndexFunc(source.Path, unsafeControlRune) >= 0 {
+			return fmt.Errorf("%w: %s.path", ErrInvalidTranscript, path)
+		}
+	case "url":
+		parsed, err := url.ParseRequestURI(source.URL)
+		if err != nil || parsed.Scheme == "" {
+			return fmt.Errorf("%w: %s.url", ErrInvalidTranscript, path)
+		}
+	case "text":
+		if source.Text == "" {
+			return fmt.Errorf("%w: %s.text", ErrInvalidTranscript, path)
+		}
+	default:
+		return fmt.Errorf("%w: %s.type", ErrInvalidTranscript, path)
 	}
 	return nil
 }
+
+func unsafeControlRune(r rune) bool { return r < 0x20 || r >= 0x7f && r <= 0x9f }
 
 func blockPayloadBytes(block *Block) int64 {
 	if block == nil {
@@ -213,12 +240,12 @@ func blockPayloadBytes(block *Block) int64 {
 	}
 	total := len(block.Text) + len(block.ID) + len(block.Name) + len(block.Input) + len(block.ToolUseID) + len(block.Content) + len(block.Data) + len(block.Signature) + len(block.Encrypted)
 	if block.Source != nil {
-		total += len(block.Source.Type) + len(block.Source.MediaType) + len(block.Source.Data) + len(block.Source.Path) + len(block.Source.URL)
+		total += len(block.Source.Type) + len(block.Source.MediaType) + len(block.Source.Data) + len(block.Source.Path) + len(block.Source.URL) + len(block.Source.Text)
 	}
 	if block.Artifact != nil {
 		total += len(block.Artifact.ID) + len(block.Artifact.Name) + len(block.Artifact.Description) + len(block.Artifact.MediaType) + len(block.Artifact.SHA256)
 		if block.Artifact.Source != nil {
-			total += len(block.Artifact.Source.Type) + len(block.Artifact.Source.MediaType) + len(block.Artifact.Source.Data) + len(block.Artifact.Source.Path) + len(block.Artifact.Source.URL)
+			total += len(block.Artifact.Source.Type) + len(block.Artifact.Source.MediaType) + len(block.Artifact.Source.Data) + len(block.Artifact.Source.Path) + len(block.Artifact.Source.URL) + len(block.Artifact.Source.Text)
 		}
 	}
 	return int64(total)
