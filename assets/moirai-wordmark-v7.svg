@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 850 205" role="img" aria-labelledby="title description">
+  <title id="title">Moirai</title>
+  <desc id="description">The word Moirai drawn in warm gold, orange, and coral terminal art.</desc>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="22" font-weight="700" xml:space="preserve">
+    <g fill="#D9A520" transform="translate(18 0)">
+      <text y="36">███╗   ███╗</text>
+      <text y="65">████╗ ████║</text>
+      <text y="94">██╔████╔██║</text>
+      <text y="123">██║╚██╔╝██║</text>
+      <text y="152">██║ ╚═╝ ██║</text>
+      <text y="181">╚═╝     ╚═╝</text>
+    </g>
+    <g fill="#E4A01D" transform="translate(208 0)">
+      <text y="36">██████╗</text>
+      <text y="65">██╔═══██╗</text>
+      <text y="94">██║   ██║</text>
+      <text y="123">██║   ██║</text>
+      <text y="152">╚██████╔╝</text>
+      <text y="181"> ╚═════╝</text>
+    </g>
+    <g fill="#ED8B19" transform="translate(372 0)">
+      <text y="36">██╗</text>
+      <text y="65">██║</text>
+      <text y="94">██║</text>
+      <text y="123">██║</text>
+      <text y="152">██║</text>
+      <text y="181">╚═╝</text>
+    </g>
+    <g fill="#F97316" transform="translate(457 0)">
+      <text y="36">██████╗</text>
+      <text y="65">██╔══██╗</text>
+      <text y="94">██████╔╝</text>
+      <text y="123">██╔══██╗</text>
+      <text y="152">██║  ██║</text>
+      <text y="181">╚═╝  ╚═╝</text>
+    </g>
+    <g fill="#F15F37" transform="translate(621 0)">
+      <text y="36"> █████╗</text>
+      <text y="65">██╔══██╗</text>
+      <text y="94">███████║</text>
+      <text y="123">██╔══██║</text>
+      <text y="152">██║  ██║</text>
+      <text y="181">╚═╝  ╚═╝</text>
+    </g>
+    <g fill="#E94F64" transform="translate(785 0)">
+      <text y="36">██╗</text>
+      <text y="65">██║</text>
+      <text y="94">██║</text>
+      <text y="123">██║</text>
+      <text y="152">██║</text>
+      <text y="181">╚═╝</text>
+    </g>
+  </g>
+</svg>
