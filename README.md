@@ -4,7 +4,7 @@
 
 # Moirai
 
-**Portable session history for AI agents and harnesses.**
+**Portable continuity for AI agent sessions.**
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-7C6CF0.svg)](LICENSE)
 [![Status: Design stage](https://img.shields.io/badge/status-design%20stage-28B8D8.svg)](#project-status)
@@ -19,6 +19,37 @@ Agent work is often locked inside one harness. Moirai is designed to preserve th
 > [!WARNING]
 > Moirai is a new project in its design stage. It does not have a stable format or production-ready implementation yet.
 
+## Continue anywhere
+
+Moirai is designed to make an agent session independent of one harness, one
+computer, or one person:
+
+- **Continue across harnesses.** Start a task in Claude Code, continue it in
+  Codex, move it to Pi, or hand it to any other compatible agent without
+  rebuilding the useful context from scratch.
+- **Continue on another computer.** Checkpoint a session on one machine and
+  resume it from an authorized laptop, workstation, or server with its history,
+  decisions, worktree references, open tasks, and artifacts intact.
+- **Let a teammate continue.** Share a scoped checkpoint with another person so
+  they can inspect the work, resume it in their preferred harness, or fork a new
+  approach with authorship and ancestry preserved.
+
+```text
+Claude Code ──┐                    ┌── Laptop
+Codex ────────┼── Moirai session ──┼── Server
+Pi ───────────┘    checkpoint      └── Teammate's computer
+                           │
+                           └── continue or fork with clear ancestry
+```
+
+Cross-harness continuation does not pretend that every runtime has identical
+internal state. A Moirai adapter restores the portable working context—messages
+that can be shared, summaries, decisions, tasks, repository state, artifacts,
+tool outcomes, and environment metadata—then maps it into the destination
+harness. Native checkpoints remain available when an exact same-harness resume
+is possible. Hidden chain-of-thought, credentials, and unshared private data do
+not travel with the session.
+
 ## What Moirai will provide
 
 - Ordered session events
@@ -28,6 +59,8 @@ Agent work is often locked inside one harness. Moirai is designed to preserve th
 - Portable imports and exports
 - Native checkpoints for exact resume in the original harness
 - Portable checkpoints for continuing work in another harness
+- Cross-device continuation through authorized remote storage
+- Team handoffs with scoped access, attribution, and ancestry
 - Selective sharing of sessions and checkpoints
 - A web interface for browsing session history, checkpoints, forks, and artifacts
 - Private and public sessions with collaborator access
