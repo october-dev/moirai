@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "id": "interop",
+    "timestamp": "2026-01-01T00:00:00Z"
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "hello"
+        }
+      ]
+    }
+  ]
+}

@@ -1,13 +1,23 @@
 {
   "name": "@october-dev/moirai",
-  "version": "0.0.1-design.0",
-  "description": "Portable session history for AI agents and harnesses.",
+  "version": "0.1.0",
+  "description": "Typed canonical session model and portable transcript tools for Moirai.",
   "license": "Apache-2.0",
   "type": "module",
-  "files": [
-    "README.md",
-    "LICENSE"
-  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/october-dev/moirai.git",
@@ -24,8 +34,7 @@
     "checkpoints",
     "interoperability"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "next"
-  }
+  "engines": { "node": ">=20" },
+  "devDependencies": { "typescript": "^5.8.3" },
+  "publishConfig": { "access": "public" }
 }

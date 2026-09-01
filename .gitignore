@@ -10,6 +10,10 @@
 # TypeScript
 node_modules/
 *.tgz
+/sdk/typescript/dist/
+
+# Local binaries
+/moirai
 
 # Editors and operating systems
 .DS_Store

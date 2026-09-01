@@ -4,152 +4,239 @@
 
 # Moirai
 
-**Portable continuity for AI agent sessions.**
+**Move an AI-agent session to another harness and keep working.**
 
+[![CI](https://github.com/october-dev/moirai/actions/workflows/ci.yml/badge.svg)](https://github.com/october-dev/moirai/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-7C6CF0.svg)](LICENSE)
-[![Status: Design stage](https://img.shields.io/badge/status-design%20stage-28B8D8.svg)](#project-status)
-[![Core: Go](https://img.shields.io/badge/core-Go-00ADD8.svg)](#technology)
+[![Schema: 1.0](https://img.shields.io/badge/schema-1.0-28B8D8.svg)](docs/FORMAT.md)
 
 </div>
 
-Moirai is an open format and reference implementation for recording, moving, and continuing AI agent sessions across tools. It is basically GitHub for your agent sessions: browse their history in a web interface, invite collaborators, and keep sessions private or make them public.
+Moirai discovers local agent sessions, translates their portable context into a
+canonical transcript, writes the destination's native session representation,
+and can launch the destination harness. Messages, tool calls and results,
+reasoning that the source explicitly stored, images, artifacts, usage, workspace
+metadata, and ancestry survive when the destination can represent them.
 
-Agent work is often locked inside one harness. Moirai is designed to preserve the useful history of that work, including events, checkpoints, forks, and artifacts, without requiring every agent to share the same runtime or its entire private context.
-
-> [!WARNING]
-> Moirai is a new project in its design stage. It does not have a stable format or production-ready implementation yet.
-
-## Continue anywhere
-
-Moirai is designed to make an agent session independent of one harness, one
-computer, or one person:
-
-- **Continue across harnesses.** Start a task in Claude Code, continue it in
-  Codex, move it to Pi, or hand it to any other compatible agent without
-  rebuilding the useful context from scratch.
-- **Continue on another computer.** Checkpoint a session on one machine and
-  resume it from an authorized laptop, workstation, or server with its history,
-  decisions, worktree references, open tasks, and artifacts intact.
-- **Let a teammate continue.** Share a scoped checkpoint with another person so
-  they can inspect the work, resume it in their preferred harness, or fork a new
-  approach with authorship and ancestry preserved.
-
-```text
-Claude Code ──┐                    ┌── Laptop
-Codex ────────┼── Moirai session ──┼── Server
-Pi ───────────┘    checkpoint      └── Teammate's computer
-                           │
-                           └── continue or fork with clear ancestry
-```
-
-Cross-harness continuation does not pretend that every runtime has identical
-internal state. A Moirai adapter restores the portable working context—messages
-that can be shared, summaries, decisions, tasks, repository state, artifacts,
-tool outcomes, and environment metadata—then maps it into the destination
-harness. Native checkpoints remain available when an exact same-harness resume
-is possible. Hidden chain-of-thought, credentials, and unshared private data do
-not travel with the session.
-
-## What Moirai will provide
-
-- Ordered session events
-- Immutable checkpoints and named milestones
-- Forks with clear ancestry
-- References to commits, patches, files, and other artifacts
-- Portable imports and exports
-- Native checkpoints for exact resume in the original harness
-- Portable checkpoints for continuing work in another harness
-- Cross-device continuation through authorized remote storage
-- Team handoffs with scoped access, attribution, and ancestry
-- Selective sharing of sessions and checkpoints
-- A web interface for browsing session history, checkpoints, forks, and artifacts
-- Private and public sessions with collaborator access
-
-Moirai will not record hidden chain-of-thought. Credentials and raw secrets do not belong in a session archive.
-
-## How it fits
-
-```text
-Agent or harness
-      |
-Moirai adapter
-      |
-Session repository ---- checkpoints ---- forks
-      |                         |
-Web interface          collaborators
-      |
-October Bus or another transport
-      |
-Another authorized agent or harness
-```
-
-Moirai owns the portable session record. A harness decides what to capture and how to resume its own native state. October Bus can carry scoped references and access to those records, but Moirai does not require October Bus or October.
-
-## Core concepts
-
-| Concept | Meaning |
-| --- | --- |
-| Session | One connected history of agent work |
-| Event | An ordered, immutable record of something that happened |
-| Checkpoint | A stable point that can be inspected, shared, or resumed |
-| Artifact | A referenced output such as a commit, patch, file, or report |
-| Fork | A new line of work with recorded ancestry |
-| Native checkpoint | Harness-specific state for the most faithful resume |
-| Portable checkpoint | Standardized state another compatible harness can understand |
-
-## Safety and privacy
-
-Session history can contain sensitive work. Moirai is being designed around a few strict rules:
-
-- Capture is explicit and inspectable.
-- Local storage is the default.
-- Remote storage and sharing are opt-in.
-- Access is scoped to the session or checkpoint being shared.
-- Secret redaction happens before persistence or export.
-- Retention and deletion remain under the user's control.
-- Imported archives are treated as untrusted input.
-
-The format will preserve useful context, not private model reasoning.
-
-## Technology
-
-The protocol and archive format will be language-independent.
-
-- **Go** will power the reference library, CLI, and local store. It gives Moirai a small cross-platform binary and fits durable local infrastructure well.
-- **TypeScript** will be the first client SDK for desktop tools and popular agent harnesses.
-- Other SDKs, including Python, can implement the same public format as adoption grows.
-
-The Go implementation is the reference implementation, not the standard itself. Compatible implementations will be free to use any language.
+It is a local-first Go library and CLI with a typed TypeScript SDK. There is no
+Moirai account, daemon, hosted service, or credential collector.
 
 ## Install
 
-Install the official TypeScript package from npm:
+Go 1.25.8 or newer:
+
+```bash
+go install github.com/october-dev/moirai/cmd/moirai@latest
+```
+
+TypeScript (Node.js 20 or newer):
 
 ```bash
 npm install @october-dev/moirai
 ```
 
-## Project status
+To build the CLI from source:
 
-The repository currently establishes the project, its safety boundary, and its implementation direction. The public format and APIs are not stable yet.
+```bash
+go build -o moirai ./cmd/moirai
+```
 
-The official TypeScript SDK is published as [`@october-dev/moirai`](https://www.npmjs.com/package/@october-dev/moirai). Its initial prerelease contains no supported API.
+## Continue a session
 
-If you want to help shape portable agent sessions, open an issue or read [CONTRIBUTING.md](CONTRIBUTING.md).
+List sessions that are already on the machine:
+
+```bash
+moirai list
+moirai list --format claude_code
+```
+
+Move one into another installed harness and launch it:
+
+```bash
+moirai continue SESSION_ID --from claude_code --with codex
+```
+
+Save the destination session without launching it:
+
+```bash
+moirai continue SESSION_ID --from codex --with cursor --no-launch
+```
+
+Continue only a message range. Ranges are one-based and reject cuts that split
+a tool call from its result:
+
+```bash
+moirai continue 'SESSION_ID#12-38' --from claude_code --with pi
+```
+
+Each cross-harness handoff receives a fresh session ID and provenance pointing
+to its source. The original session is not modified.
+
+## Supported formats
+
+`read` parses native data into the canonical model. `write` renders native
+data. `local` means Moirai discovers the harness's default on-disk store.
+`continue` means it can save a new native session and start the installed
+harness. Source-only stores are never modified.
+
+| Format | Read | Write | Local | Continue | Notes |
+| --- | :---: | :---: | :---: | :---: | --- |
+| Claude Code | yes | yes | yes | yes | JSONL projects |
+| Codex | yes | yes | yes | yes | rollout JSONL |
+| Pi | yes | yes | yes | yes | session JSONL |
+| Campfire | yes | yes | yes | yes | session JSONL |
+| OpenCode | yes | yes | yes | yes | SQLite discovery; native CLI import |
+| Cursor Agent | yes | yes | yes | yes | content-addressed chat store |
+| Cursor desktop | yes | yes | yes | yes | workspace SQLite state |
+| Grok CLI | yes | yes | yes | yes | session bundles |
+| Antigravity CLI | yes | yes | yes | yes | protobuf records in SQLite |
+| Claude Cowork | yes | yes | yes | yes | local-agent session trees |
+| fx | yes | yes | yes | yes | event bundles |
+| Amp | yes | yes | read-only | no | local threads remain untouched |
+| Hermes Agent | yes | yes | read-only | no | local SQLite remains untouched |
+| Claude Chat export | yes | no | no | no | explicit supplied export only |
+| ChatGPT export | yes | no | no | no | explicit supplied export only |
+| Simple JSON | yes | yes | no | no | portable interchange format |
+
+Run `moirai formats` or `moirai formats --json` for the machine-readable
+capability registry.
+
+## Inspect, convert, search, and archive
+
+Format detection is automatic for supported JSON and JSONL files; use `--from`
+when a source is ambiguous.
+
+```bash
+moirai inspect session.jsonl
+moirai convert session.jsonl --to codex --out rollout.jsonl
+moirai show SESSION_ID --format codex
+moirai search 'database migration' --format claude_code
+moirai export SESSION_ID --format cursor --out session.json
+moirai import session.json --to pi
+```
+
+Portable `.moirai` archives contain canonical session JSON and a SHA-256
+integrity digest:
+
+```bash
+moirai archive create session.json --out session.moirai
+moirai archive verify session.moirai
+```
+
+Deletion is deliberately explicit:
+
+```bash
+moirai delete SESSION_ID --format pi --yes
+```
+
+## Go API
+
+```go
+package main
+
+import (
+	"fmt"
+	"os"
+
+	moirai "github.com/october-dev/moirai"
+)
+
+func main() {
+	data, _ := os.ReadFile("session.jsonl")
+	parsed, format, err := moirai.Parse(data, "", moirai.ParseOptions{
+		Limits: moirai.DefaultLimits(),
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(format, len(parsed.Transcript.Messages))
+}
+```
+
+The Go package also exposes the codec and store registries, transcript
+validation, safe range selection, bounded text projection, fuzzy search,
+archive verification, and launch-command generation.
+
+## TypeScript API
+
+```ts
+import {
+  decodeArchive,
+  encodeArchive,
+  search,
+  select,
+  SimpleCodec,
+  toText,
+} from "@october-dev/moirai";
+
+const transcript = new SimpleCodec().parse(input).transcript;
+const excerpt = select(transcript, { start: 5, end: 20 });
+const prompt = toText(excerpt, { maxBytes: 64 * 1024, includeTools: true });
+const hits = search(transcript, "failing migration");
+const archive = await encodeArchive(transcript);
+await decodeArchive(archive); // validates the digest and transcript
+```
+
+The SDK uses strict types, Web Crypto, configurable safety limits, and the same
+schema and archive representation as the Go implementation.
+
+## Continuity boundary
+
+Different harnesses do not expose identical runtime state. Moirai carries the
+durable, inspectable portion of a session and maps unsupported native events to
+explicit `unknown` blocks or warnings. It does not claim to recreate model-side
+state, in-memory processes, terminal state, or hidden reasoning that a harness
+never persisted.
+
+Moirai does not authenticate to remote chat services. Web conversation support
+accepts only exports supplied directly by the user.
+
+## Safety
+
+- Input size, message, block, metadata, nesting, text, and inline-media limits
+  are enforced before untrusted content is accepted.
+- Local writes are atomic, private (`0600` files and `0700` directories), and
+  constrained to validated store paths.
+- Symlink and traversal checks protect store load, save, and deletion.
+- Existing source sessions are not overwritten during cross-harness handoff.
+- Archives are integrity checked before use.
+- No command embedded in transcript content is executed by conversion.
+
+Session histories can still contain secrets that the source harness recorded.
+Inspect an export before sharing it; Moirai intentionally does not guess which
+project data should be redacted. See [SECURITY.md](SECURITY.md).
+
+## Format and compatibility
+
+The language-independent canonical format is documented in
+[docs/FORMAT.md](docs/FORMAT.md) and published as a
+[JSON Schema](schema/moirai-session.schema.json). Schema `1.0` readers reject
+unknown major versions. Native codecs preserve unrepresentable source data in
+warnings or explicit extension fields instead of silently claiming lossless
+conversion.
 
 ## Contributing
 
-Contributions are welcome, especially around portable formats, secure local storage, importers, SDKs, and harness integrations. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Run the complete local checks before opening a pull request:
 
-Report security issues privately through [SECURITY.md](SECURITY.md).
+```bash
+go test -race ./...
+go vet ./...
+go build ./cmd/moirai
+npm --prefix sdk/typescript ci
+npm --prefix sdk/typescript test
+npm --prefix sdk/typescript pack --dry-run
+```
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for fixture and compatibility rules.
+Report vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
 ## License
 
-Moirai is licensed under the [Apache License 2.0](LICENSE). The permissive license is intentional so open and commercial agent tools can adopt the format.
+Moirai is licensed under the [Apache License 2.0](LICENSE).
 
-## Trademark
-
-The Apache 2.0 license applies to the code and documentation in this repository. It does not grant rights to October's names, logos, or other brand assets. Do not imply endorsement by October.
+The license applies to the code and documentation, but does not grant rights to
+October's names, logos, or brand assets.
 
 ---
 

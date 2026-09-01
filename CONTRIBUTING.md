@@ -2,53 +2,53 @@
 
 Thank you for helping make agent sessions portable across tools.
 
-Moirai is in its design stage. Format, privacy, and security decisions made now will be difficult to change later, so please open an issue before starting a large change.
-
-## Good contributions
-
-We welcome:
-
-- portable session and checkpoint schemas;
-- safe local storage improvements;
-- archive import and export support;
-- Go reference implementation work;
-- SDKs and harness integrations;
-- examples and clear documentation;
-- privacy, security, and interoperability improvements.
-
-Keep contributions focused on recording, moving, and continuing agent sessions. Product-specific orchestration and private model reasoning are outside the project's scope.
-
 ## Before you start
 
 1. Search existing issues and pull requests.
-2. Open an issue for new format fields, public APIs, storage changes, or security-sensitive behavior.
-3. Keep the proposal small enough to review and verify.
-4. Never include real credentials, private sessions, customer data, or hidden chain-of-thought in examples or tests.
+2. Open an issue before changing schema `1.0`, a public API, a native store
+   layout, or security-sensitive behavior.
+3. Never include real credentials, private sessions, customer data, cookies,
+   account databases, or hidden model reasoning in fixtures.
+
+## Compatibility rules
+
+- A native reader must be tested with a small, synthetic fixture shaped like
+  the harness output—not only with output from its paired writer.
+- A writable adapter must pass canonical → native → canonical round trips for
+  text, tool calls/results, timestamps, metadata, and supported media.
+- Unsupported native records produce a warning or an `unknown` block. Do not
+  silently discard data and call the conversion lossless.
+- Source-only stores must return `ErrSourceOnly` for mutation attempts.
+- A new handoff must mint a new ID and retain source provenance.
+- Range selection must never separate a known tool call from its result.
+- Store operations must reject absolute paths, traversal, and symlinks.
 
 ## Development
 
-The reference implementation uses Go 1.25 or newer.
+The reference implementation requires Go 1.25.8. The TypeScript SDK requires
+Node.js 20 or newer.
 
 ```bash
-go test ./...
+go test -race ./...
 go vet ./...
+go build ./cmd/moirai
+npm --prefix sdk/typescript ci
+npm --prefix sdk/typescript test
+npm --prefix sdk/typescript pack --dry-run
 ```
 
-The TypeScript package is currently prerelease metadata only. Its public API will arrive with the first SDK implementation.
+When changing the canonical model, update all of the following in the same pull
+request:
+
+- Go structs and validation;
+- TypeScript types and validation;
+- `schema/moirai-session.schema.json`;
+- `docs/FORMAT.md`;
+- cross-language archive fixtures and tests, where applicable.
 
 ## Pull requests
 
-A good pull request:
-
-- explains the user-facing problem;
-- stays focused on one change;
-- includes tests for behavior changes;
-- updates public documentation or schemas when the format changes;
-- preserves backward compatibility once a format version is declared stable;
-- passes the repository checks.
-
-Use clear commit messages. Do not include credentials, private data, or unrelated generated files.
-
-## Licensing
-
-By submitting a contribution, you agree that it may be distributed under the [Apache License 2.0](LICENSE).
+Explain the user-facing problem, format/store assumptions, expected information
+loss, and verification performed. Keep generated build output and dependencies
+out of commits. By contributing, you agree that your work may be distributed
+under the [Apache License 2.0](LICENSE).

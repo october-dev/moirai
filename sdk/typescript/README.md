@@ -1,7 +1,16 @@
 # @october-dev/moirai
 
-Official TypeScript SDK for [Moirai](https://github.com/october-dev/moirai), a portable session history for AI agents and harnesses.
+Typed canonical sessions and portable transcript operations for Moirai.
 
-> This package currently reserves the official name. It has no supported API and is not ready for production use.
+```ts
+import { SimpleCodec, search, toText } from "@october-dev/moirai";
 
-Follow the repository for the first SDK implementation.
+const { transcript, warnings } = new SimpleCodec().parse(source);
+console.log(toText(transcript, { includeTools: true }));
+console.log(search(transcript, "failing test"));
+```
+
+The SDK validates the versioned canonical schema, safety limits, tool-call
+pairing, UTF-8-bounded text projection, message ranges, fuzzy search, and
+SHA-256 integrity archives. Native local-store integration is provided by the
+Go library and `moirai` CLI.

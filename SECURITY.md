@@ -1,28 +1,44 @@
 # Security Policy
 
+## Supported versions
+
+Security fixes are released for the latest minor release on the default branch.
+Users should upgrade to the newest available version before reporting an issue.
+
 ## Reporting a vulnerability
 
-Please do not report security vulnerabilities in public issues.
+Do not report vulnerabilities in a public issue. Use
+[GitHub private vulnerability reporting](https://github.com/october-dev/moirai/security/advisories/new)
+and include the affected version, impact, reproduction steps, and a minimal
+sanitized fixture when possible.
 
-Use [GitHub private vulnerability reporting](https://github.com/october-dev/moirai/security/advisories/new) to send the maintainers a private report. Include the affected component, impact, reproduction steps, and any suggested fix.
+Do not use real credentials, private sessions, or customer data in a report.
 
-We will acknowledge a complete report as soon as practical and keep you informed while it is investigated.
+## Security boundary
 
-## Current support
+Moirai parses untrusted session data and writes to local harness stores. Its
+security controls include bounded parsing, canonical validation, archive
+integrity checks, guarded store paths, rejection of symlink traversal, atomic
+private file writes, fresh identity on handoff, and confirmation for deletion.
 
-Moirai is in its design stage and has no stable release. Security fixes will be applied to the latest prerelease and the default branch.
+Moirai does not:
 
-## Relevant reports
+- authenticate to remote chat services;
+- copy harness credentials, cookies, tokens, or account databases;
+- execute commands found inside transcript content;
+- infer whether ordinary message or tool content contains a project secret;
+- provide confidentiality or authenticity through its archive checksum.
 
-Useful reports include:
+An archive SHA-256 value detects accidental or unsophisticated modification; it
+is not a signature. Protect archives using normal filesystem and transport
+access controls.
 
-- disclosure of session data or secrets;
-- access to a session outside its granted scope;
-- unsafe archive import, path traversal, or code execution;
-- cross-session data leakage;
-- authentication or authorization bypasses;
-- corruption of session ancestry or checkpoint integrity;
-- denial of service from untrusted session data;
-- failures in encryption or redaction behavior once implemented.
+## Useful reports
 
-Do not use real private sessions, credentials, or customer data when demonstrating a vulnerability.
+- path traversal, unsafe symlink handling, or unintended deletion;
+- command execution caused by imported content;
+- reads or writes outside a selected harness store;
+- archive verification bypasses;
+- denial of service that bypasses configured input limits;
+- cross-session identity or provenance corruption;
+- secrets copied from an unrelated account or session.
