@@ -1,0 +1,26 @@
+# Build outputs
+/bin/
+/dist/
+/coverage/
+
+# Go
+*.test
+*.out
+
+# TypeScript
+node_modules/
+*.tgz
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Private working material
+/_audit/

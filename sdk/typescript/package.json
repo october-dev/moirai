@@ -1,0 +1,31 @@
+{
+  "name": "@october-dev/moirai",
+  "version": "0.0.1-design.0",
+  "description": "Portable session history for AI agents and harnesses.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/october-dev/moirai.git",
+    "directory": "sdk/typescript"
+  },
+  "homepage": "https://github.com/october-dev/moirai#readme",
+  "bugs": {
+    "url": "https://github.com/october-dev/moirai/issues"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "sessions",
+    "checkpoints",
+    "interoperability"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  }
+}
