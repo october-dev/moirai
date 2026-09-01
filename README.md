@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/moirai-wordmark.svg" alt="Moirai ASCII wordmark" width="760">
+<img src="assets/moirai-wordmark-v4.svg" alt="Moirai terminal wordmark" width="760">
 
 # Moirai
 
