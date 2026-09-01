@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 170" role="img" aria-labelledby="title description">
   <title id="title">Moirai</title>
-  <desc id="description">The word Moirai drawn as blue and violet ASCII art.</desc>
+  <desc id="description">The word Moirai drawn as gold, orange, and coral ASCII art.</desc>
   <defs>
     <linearGradient id="moirai-gradient" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#28B8D8"/>
-      <stop offset="0.52" stop-color="#7C6CF0"/>
-      <stop offset="1" stop-color="#B85CE5"/>
+      <stop offset="0" stop-color="#D9A520"/>
+      <stop offset="0.52" stop-color="#F97316"/>
+      <stop offset="1" stop-color="#E94F64"/>
     </linearGradient>
   </defs>
   <g fill="url(#moirai-gradient)" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="24" font-weight="700" xml:space="preserve">

@@ -12,7 +12,7 @@
 
 </div>
 
-Moirai is an open format and reference implementation for recording, moving, and continuing AI agent sessions across tools.
+Moirai is an open format and reference implementation for recording, moving, and continuing AI agent sessions across tools. It is basically GitHub for your agent sessions: browse their history in a web interface, invite collaborators, and keep sessions private or make them public.
 
 Agent work is often locked inside one harness. Moirai is designed to preserve the useful history of that work, including events, checkpoints, forks, and artifacts, without requiring every agent to share the same runtime or its entire private context.
 
@@ -29,6 +29,8 @@ Agent work is often locked inside one harness. Moirai is designed to preserve th
 - Native checkpoints for exact resume in the original harness
 - Portable checkpoints for continuing work in another harness
 - Selective sharing of sessions and checkpoints
+- A web interface for browsing session history, checkpoints, forks, and artifacts
+- Private and public sessions with collaborator access
 
 Moirai will not record hidden chain-of-thought. Credentials and raw secrets do not belong in a session archive.
 
@@ -40,6 +42,8 @@ Agent or harness
 Moirai adapter
       |
 Session repository ---- checkpoints ---- forks
+      |                         |
+Web interface          collaborators
       |
 October Bus or another transport
       |
