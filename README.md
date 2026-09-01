@@ -121,11 +121,19 @@ The protocol and archive format will be language-independent.
 
 The Go implementation is the reference implementation, not the standard itself. Compatible implementations will be free to use any language.
 
+## Install
+
+Install the official TypeScript package from npm:
+
+```bash
+npm install @october-dev/moirai
+```
+
 ## Project status
 
 The repository currently establishes the project, its safety boundary, and its implementation direction. The public format and APIs are not stable yet.
 
-The npm name [`@october-dev/moirai`](https://www.npmjs.com/package/@october-dev/moirai) is reserved for the official TypeScript SDK. Its initial prerelease contains no supported API.
+The official TypeScript SDK is published as [`@october-dev/moirai`](https://www.npmjs.com/package/@october-dev/moirai). Its initial prerelease contains no supported API.
 
 If you want to help shape portable agent sessions, open an issue or read [CONTRIBUTING.md](CONTRIBUTING.md).
 
