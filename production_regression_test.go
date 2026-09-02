@@ -15,6 +15,21 @@ import (
 )
 
 func TestClaudeNativeLayoutAndDiscovery(t *testing.T) {
+	for _, test := range []struct {
+		cwd  string
+		want string
+	}{
+		{cwd: "/Users/alice/src/app", want: "-Users-alice-src-app"},
+		{cwd: "/tmp/e2e.dot_proj", want: "-tmp-e2e-dot-proj"},
+		{cwd: "/Users/alice/my app@v2", want: "-Users-alice-my-app-v2"},
+		{cwd: `C:\Users\x`, want: "C--Users-x"},
+		{cwd: "", want: "-"},
+	} {
+		if got := encodeClaudeProject(test.cwd); got != test.want {
+			t.Errorf("encodeClaudeProject(%q) = %q, want %q", test.cwd, got, test.want)
+		}
+	}
+
 	transcript := nativeFixture(t)
 	transcript.Meta.CWD = "/Users/alice/src/app"
 	location, err := claudeLayout(transcript, RenderOptions{})
