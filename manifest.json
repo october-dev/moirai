@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.october-dev.moirai",
   "name": "Moirai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "October",
   "license": "Apache-2.0",
   "description": "Local AI-agent sessions in the Omarchy bar: list what Moirai finds on this machine and continue one in another harness.",
