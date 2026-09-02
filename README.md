@@ -98,6 +98,9 @@ harness. Source-only stores are never modified.
 | ChatGPT export | yes | no | no | no | explicit supplied export only |
 | Simple JSON | yes | yes | no | no | portable interchange format |
 
+Claude Code discovery and writes honor `CLAUDE_CONFIG_DIR`; otherwise Moirai
+uses `~/.claude/projects`.
+
 Run `moirai formats` or `moirai formats --json` for the machine-readable
 capability registry.
 

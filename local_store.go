@@ -294,7 +294,8 @@ func DefaultStores() (*StoreRegistry, error) {
 		}
 		return registry.Register(store)
 	}
-	claudeRoot := filepath.Join(home, ".claude", "projects")
+	claudeHome := envOr("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	claudeRoot := filepath.Join(claudeHome, "projects")
 	if err := add(NewLocalFileStore(FormatClaudeCode, claudeRoot, ".jsonl", claudeLayout)); err != nil {
 		return nil, err
 	}
