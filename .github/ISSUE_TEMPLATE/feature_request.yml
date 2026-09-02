@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a focused addition to Moirai.
 title: "proposal: "
-labels: [proposal]
+labels: [enhancement]
 body:
   - type: textarea
     id: problem
