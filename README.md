@@ -224,6 +224,40 @@ unknown major versions. Native codecs preserve the documented canonical subset
 and surface known omissions as warnings; the compatibility matrix documents
 fields that are intentionally outside that subset.
 
+## Omarchy plugin
+
+This repository is also an [Omarchy](https://omarchy.org) shell plugin
+(`manifest.json` at the root, QML under `omarchy/`). It adds a bar widget that
+lists the sessions `moirai list --json` finds on the machine and continues the
+one you pick in the harness you choose, inside a terminal.
+
+Install the CLI first; the widget only calls the `moirai` binary on your PATH:
+
+```bash
+go install github.com/october-dev/moirai/cmd/moirai@latest
+omarchy plugin add https://github.com/october-dev/moirai.git --enable
+```
+
+Remove it with:
+
+```bash
+omarchy plugin remove io.github.october-dev.moirai
+```
+
+Settings (Setup › Plugins, or inline on the widget's `shell.json` entry):
+`continueWith` (target harness, default `claude_code`), `sourceFormat`
+(optional single source format), `refreshIntervalSec` (10–3600, default 120),
+`maxSessions` (1–50, default 12).
+
+What it runs: `moirai list --json` on a timer and when the popup opens, and
+`omarchy-launch-tui moirai continue <id> --from <format> --with <harness>` when
+you pick a session. Every invocation is an argv vector; session ids and format
+names are validated against `[A-Za-z0-9._-]` before use, and titles are
+stripped of control characters before display. The plugin needs no sudo, no
+network access, and writes nothing except what `moirai continue` saves into the
+destination harness's own store. External dependencies: the `moirai` CLI and
+the destination harness itself.
+
 ## Contributing
 
 Run the complete local checks before opening a pull request:

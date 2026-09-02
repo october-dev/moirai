@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.october-dev.moirai",
+  "name": "Moirai",
+  "version": "0.1.0",
+  "author": "October",
+  "license": "Apache-2.0",
+  "description": "Local AI-agent sessions in the Omarchy bar: list what Moirai finds on this machine and continue one in another harness.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "omarchy/Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Moirai",
+    "description": "Sessions discovered by `moirai list`, with one click to continue a session in the harness you choose. Requires the moirai CLI on PATH.",
+    "category": "AI",
+    "aliases": ["moirai", "sessions", "agent-sessions"],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "continueWith": "claude_code",
+      "sourceFormat": "",
+      "refreshIntervalSec": 120,
+      "maxSessions": 12
+    },
+    "schema": [
+      {
+        "key": "continueWith",
+        "type": "enum",
+        "label": "Continue sessions with",
+        "options": ["claude_code", "codex", "pi", "campfire", "opencode", "cursor", "cursor_desktop", "grok", "antigravity", "cowork", "fx"],
+        "defaultValue": "claude_code",
+        "description": "Harness that `moirai continue` targets when you pick a session."
+      },
+      {
+        "key": "sourceFormat",
+        "type": "string",
+        "label": "Only list this source format",
+        "defaultValue": "",
+        "description": "Optional. A Moirai format id such as claude_code or codex. Empty lists every local store."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 10,
+        "max": 3600,
+        "step": 10,
+        "defaultValue": 120
+      },
+      {
+        "key": "maxSessions",
+        "type": "integer",
+        "label": "Sessions shown",
+        "min": 1,
+        "max": 50,
+        "step": 1,
+        "defaultValue": 12
+      }
+    ]
+  }
+}
