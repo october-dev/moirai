@@ -69,22 +69,19 @@ func TestClaudeNativeLayoutAndDiscovery(t *testing.T) {
 }
 
 func TestClaudeDetectionAndSidechainContract(t *testing.T) {
-	id := "aaaaaaaa-1111-4222-8333-444444444444"
-	fixture := strings.Join([]string{
-		`{"type":"file-history-snapshot","messageId":"m1"}`,
-		`{"type":"user","sessionId":"` + id + `","cwd":"/tmp/proj","uuid":"u1","timestamp":"2026-08-10T20:05:50Z","message":{"role":"user","content":"hi"}}`,
-		`{"type":"assistant","isSidechain":true,"sessionId":"` + id + `","cwd":"/tmp/proj","uuid":"s1","timestamp":"2026-08-10T20:05:51Z","message":{"role":"assistant","content":[{"type":"text","text":"SIDECHAIN"}]}}`,
-		`{"type":"assistant","sessionId":"` + id + `","cwd":"/tmp/proj","uuid":"a1","timestamp":"2026-08-10T20:05:52Z","message":{"role":"assistant","content":[{"type":"redacted_thinking","data":"ciphertext"},{"type":"text","text":"done"}]}}`,
-	}, "\n") + "\n"
-	format, err := DetectFormat([]byte(fixture))
-	if err != nil || format != FormatClaudeCode {
-		t.Fatalf("detect = %s, %v", format, err)
-	}
-	parsed, err := (ClaudeCodeCodec{}).Parse([]byte(fixture), ParseOptions{Limits: DefaultLimits()})
+	fixture, err := os.ReadFile(filepath.Join("testdata", "native", "claude_code.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(ToText(parsed.Transcript, TextOptions{MaxBytes: 1 << 20}), "SIDECHAIN") || len(parsed.Transcript.Messages) != 2 {
+	format, err := DetectFormat(fixture)
+	if err != nil || format != FormatClaudeCode {
+		t.Fatalf("detect = %s, %v", format, err)
+	}
+	parsed, err := (ClaudeCodeCodec{}).Parse(fixture, ParseOptions{Limits: DefaultLimits()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(ToText(parsed.Transcript, TextOptions{MaxBytes: 1 << 20}), "SIDECHAIN") || len(parsed.Transcript.Messages) != 4 {
 		t.Fatalf("sidechain leaked: %#v", parsed.Transcript.Messages)
 	}
 	rendered, err := (ClaudeCodeCodec{}).Render(parsed.Transcript, RenderOptions{Limits: DefaultLimits()})
@@ -93,6 +90,27 @@ func TestClaudeDetectionAndSidechainContract(t *testing.T) {
 	}
 	if strings.Contains(string(rendered.Data), `"encrypted"`) || !strings.Contains(string(rendered.Data), `"redacted_thinking"`) {
 		t.Fatalf("invalid thinking contract: %s", rendered.Data)
+	}
+	codex, err := (CodexCodec{}).Render(parsed.Transcript, RenderOptions{Limits: DefaultLimits()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	records, _, err := decodeJSONLines(codex.Data, DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundOutput := false
+	for _, record := range records {
+		payload := object(record["payload"])
+		if stringValue(payload["type"]) == "function_call_output" {
+			if _, ok := payload["output"].(string); !ok {
+				t.Fatalf("Codex tool output is not a string: %#v", payload["output"])
+			}
+			foundOutput = true
+		}
+	}
+	if !foundOutput {
+		t.Fatal("Codex tool output missing")
 	}
 }
 

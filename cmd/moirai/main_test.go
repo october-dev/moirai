@@ -57,6 +57,63 @@ func TestImportRehomesMissingWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestContinueClaudeUsesNativeProjectLayout(t *testing.T) {
+	home := t.TempDir()
+	claudeConfig := filepath.Join(home, "claude-config")
+	t.Setenv("HOME", home)
+	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
+	t.Setenv("CODEX_HOME", filepath.Join(home, "codex-config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "share"))
+	project := filepath.Join(t.TempDir(), "e2e.dot_proj")
+	if err := os.MkdirAll(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(t.TempDir(), "session.json")
+	source := map[string]any{
+		"id":        "source",
+		"timestamp": "2026-09-02T00:00:00Z",
+		"cwd":       project,
+		"messages":  []any{map[string]any{"role": "user", "content": "continue this session"}},
+	}
+	data, err := json.Marshal(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(input, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	a := app{out: &stdout, err: &stderr}
+	if err := a.run(context.Background(), []string{"continue", input, "--from", "simple", "--with", "claude_code", "--no-launch"}); err != nil {
+		t.Fatal(err)
+	}
+	var saved moirai.SavedSession
+	if err := json.Unmarshal(stdout.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	encodedProject := strings.Map(func(char rune) rune {
+		if char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			return char
+		}
+		return '-'
+	}, project)
+	wantedLocation := filepath.Join(encodedProject, saved.Ref.ID+".jsonl")
+	if saved.Ref.Location != wantedLocation {
+		t.Fatalf("location = %q, want %q", saved.Ref.Location, wantedLocation)
+	}
+	if _, err := os.Stat(filepath.Join(claudeConfig, "projects", wantedLocation)); err != nil {
+		t.Fatalf("saved Claude session: %v", err)
+	}
+	command, err := moirai.CommandFor(moirai.FormatClaudeCode, saved.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if command.Program != "claude" || len(command.Args) != 2 || command.Args[0] != "--resume" || command.Args[1] != saved.Ref.ID || command.Dir != project {
+		t.Fatalf("launch command = %#v", command)
+	}
+}
+
 func TestHumanOutputScrubsTerminalControls(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
