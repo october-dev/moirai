@@ -56,6 +56,7 @@ func TestLocalFileStoreLifecycle(t *testing.T) {
 func TestDefaultStoresHonorClaudeConfigDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	for _, test := range []struct {
 		name       string

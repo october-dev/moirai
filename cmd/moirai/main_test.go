@@ -38,6 +38,7 @@ func TestFormatsAndInterspersedFlags(t *testing.T) {
 func TestImportRehomesMissingWorkingDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	input := filepath.Join(t.TempDir(), "session.json")
 	if err := os.WriteFile(input, []byte(`{"id":"source","cwd":"/definitely/missing/moirai-project","messages":[{"role":"user","content":"hello"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -61,6 +62,7 @@ func TestContinueClaudeUsesNativeProjectLayout(t *testing.T) {
 	home := t.TempDir()
 	claudeConfig := filepath.Join(home, "claude-config")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
 	t.Setenv("CODEX_HOME", filepath.Join(home, "codex-config"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "share"))
@@ -117,6 +119,7 @@ func TestContinueClaudeUsesNativeProjectLayout(t *testing.T) {
 func TestHumanOutputScrubsTerminalControls(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	root := filepath.Join(home, ".pi", "agent", "sessions", "--tmp-project--")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
