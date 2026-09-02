@@ -162,9 +162,9 @@ function canonicalStringify(value: unknown): string {
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new MoiraiError("invalid_transcript", "non-finite JSON number");
     const normalized = Object.is(value, -0) ? 0 : value;
-    const [mantissa, rawExponent] = normalized.toExponential(17).split("e");
-    const exponent = Number(rawExponent);
-    return `${mantissa}e${exponent < 0 ? "-" : "+"}${Math.abs(exponent)}`;
+    const encoded = JSON.stringify(normalized);
+    if (encoded === undefined) throw new MoiraiError("invalid_transcript", "invalid JSON number");
+    return encoded;
   }
   if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(",")}]`;
   if (isRecord(value)) return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalStringify(value[key])}`).join(",")}}`;

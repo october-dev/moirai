@@ -83,6 +83,11 @@ jobs:
         run: |
           mkdir -p /tmp/moirai-interop
           go build -o /tmp/moirai-interop/moirai ./cmd/moirai
-          /tmp/moirai-interop/moirai archive create testdata/archive-interop-session.json --from simple --out /tmp/moirai-interop/go.moirai
-          node .github/scripts/archive-interop.mjs /tmp/moirai-interop/go.moirai /tmp/moirai-interop/typescript.moirai testdata/archive-interop-session.json
-          /tmp/moirai-interop/moirai archive verify /tmp/moirai-interop/typescript.moirai
+          for source in testdata/archive-interop-session.json testdata/archive-interop-numbers.json; do
+            name="$(basename "$source" .json)"
+            go_archive="/tmp/moirai-interop/${name}-go.moirai"
+            typescript_archive="/tmp/moirai-interop/${name}-typescript.moirai"
+            /tmp/moirai-interop/moirai archive create "$source" --from simple --out "$go_archive"
+            node .github/scripts/archive-interop.mjs "$go_archive" "$typescript_archive" "$source"
+            /tmp/moirai-interop/moirai archive verify "$typescript_archive"
+          done

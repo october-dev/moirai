@@ -80,7 +80,7 @@ func DecodeArchive(data []byte, limits Limits) (*Transcript, error) {
 
 // canonicalTranscriptJSON defines the language-independent archive digest
 // input. Object keys are sorted, strings are UTF-8 JSON strings without HTML
-// escaping, and every finite JSON number uses a fixed 17-digit exponent form.
+// escaping, and every finite JSON number uses ECMAScript's shortest form.
 func canonicalTranscriptJSON(transcript *Transcript) ([]byte, error) {
 	payload, err := json.Marshal(transcript)
 	if err != nil {
@@ -117,24 +117,11 @@ func writeCanonicalJSON(output *bytes.Buffer, value any) error {
 		text = strings.ReplaceAll(text, `\u2029`, string(rune(0x2029)))
 		output.WriteString(text)
 	case json.Number:
-		number, err := strconv.ParseFloat(string(value), 64)
-		if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
-			return fmt.Errorf("%w: invalid JSON number", ErrInvalidTranscript)
+		encoded, err := canonicalJSONNumber(value)
+		if err != nil {
+			return err
 		}
-		if number == 0 {
-			number = 0
-		}
-		formatted := strconv.FormatFloat(number, 'e', 17, 64)
-		mantissa, exponent, _ := strings.Cut(formatted, "e")
-		sign := "+"
-		if strings.HasPrefix(exponent, "-") {
-			sign = "-"
-		}
-		exponent = strings.TrimLeft(exponent, "+-0")
-		if exponent == "" {
-			exponent = "0"
-		}
-		output.WriteString(mantissa + "e" + sign + exponent)
+		output.WriteString(encoded)
 	case []any:
 		output.WriteByte('[')
 		for index, child := range value {
@@ -170,6 +157,64 @@ func writeCanonicalJSON(output *bytes.Buffer, value any) error {
 		return fmt.Errorf("%w: unsupported canonical JSON value %T", ErrInvalidTranscript, value)
 	}
 	return nil
+}
+
+func canonicalJSONNumber(value json.Number) (string, error) {
+	number, err := strconv.ParseFloat(string(value), 64)
+	if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
+		return "", fmt.Errorf("%w: invalid JSON number", ErrInvalidTranscript)
+	}
+	if number == 0 {
+		return "0", nil
+	}
+	negative := number < 0
+	if negative {
+		number = -number
+	}
+	mantissa, exponentText, found := strings.Cut(strconv.FormatFloat(number, 'e', -1, 64), "e")
+	if !found {
+		return "", fmt.Errorf("%w: invalid JSON number", ErrInvalidTranscript)
+	}
+	exponent, err := strconv.Atoi(exponentText)
+	if err != nil {
+		return "", fmt.Errorf("%w: invalid JSON number", ErrInvalidTranscript)
+	}
+	digits := strings.ReplaceAll(mantissa, ".", "")
+	k := len(digits)
+	n := exponent + 1
+	var output strings.Builder
+	if negative {
+		output.WriteByte('-')
+	}
+	switch {
+	case k <= n && n <= 21:
+		output.WriteString(digits)
+		output.WriteString(strings.Repeat("0", n-k))
+	case 0 < n && n <= 21:
+		output.WriteString(digits[:n])
+		output.WriteByte('.')
+		output.WriteString(digits[n:])
+	case -6 < n && n <= 0:
+		output.WriteString("0.")
+		output.WriteString(strings.Repeat("0", -n))
+		output.WriteString(digits)
+	default:
+		output.WriteByte(digits[0])
+		if k > 1 {
+			output.WriteByte('.')
+			output.WriteString(digits[1:])
+		}
+		output.WriteByte('e')
+		scientificExponent := n - 1
+		if scientificExponent >= 0 {
+			output.WriteByte('+')
+		} else {
+			output.WriteByte('-')
+			scientificExponent = -scientificExponent
+		}
+		output.WriteString(strconv.Itoa(scientificExponent))
+	}
+	return output.String(), nil
 }
 
 func decodeTranscriptStrict(data []byte, transcript *Transcript) error {

@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "meta": {
+    "id": "interop-numbers",
+    "timestamp": "2026-09-02T00:00:00Z",
+    "cwd": "/tmp/numeric-interop",
+    "extra": {
+      "zero": 0,
+      "negative_zero": -0,
+      "one": 1,
+      "tenth": 0.1,
+      "large_exponent": 1e21,
+      "large_decimal": 1e20,
+      "fixed_small": 0.000001,
+      "scientific_small": 1e-7,
+      "smallest_subnormal": 5e-324,
+      "largest_finite": 1.7976931348623157e308,
+      "rounding_tie": 1.490116119384765625e-8,
+      "rounded_integer": 123456789012345678,
+      "sum_edge": 0.30000000000000004
+    }
+  },
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Verify numeric archive interoperability."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "tool_use",
+          "id": "numbers-1",
+          "name": "compare_numbers",
+          "input": {
+            "zero": 0,
+            "negative_zero": -0,
+            "one": 1,
+            "tenth": 0.1,
+            "large_exponent": 1e21,
+            "large_decimal": 1e20,
+            "fixed_small": 0.000001,
+            "scientific_small": 1e-7,
+            "smallest_subnormal": 5e-324,
+            "largest_finite": 1.7976931348623157e308,
+            "rounding_tie": 1.490116119384765625e-8,
+            "rounded_integer": 123456789012345678,
+            "sum_edge": 0.30000000000000004
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "tool_result",
+          "tool_use_id": "numbers-1",
+          "content": "matched"
+        }
+      ]
+    }
+  ]
+}

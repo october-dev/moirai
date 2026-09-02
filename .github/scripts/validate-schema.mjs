@@ -10,7 +10,7 @@ const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false }
 addFormats(ajv);
 const validate = ajv.compile(schema);
 
-for (const name of ["session-v1.json", "archive-interop-session.json"]) {
+for (const name of ["session-v1.json", "archive-interop-session.json", "archive-interop-numbers.json"]) {
   const value = JSON.parse(await readFile(new URL(`../../testdata/${name}`, import.meta.url), "utf8"));
   if (!validate(value)) throw new Error(`${name}: ${ajv.errorsText(validate.errors, { separator: "\n" })}`);
 }
