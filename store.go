@@ -280,9 +280,26 @@ func atomicWriteExclusive(path string, data []byte, mode fs.FileMode) error {
 
 func reservePath(path string) (func(), error) {
 	lock := path + ".moirai-create"
-	file, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	create := func() (*os.File, error) {
+		return os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	}
+	file, err := create()
 	if errors.Is(err, fs.ErrExist) {
-		return nil, ErrSessionExists
+		info, statErr := os.Lstat(lock)
+		if statErr == nil {
+			if !info.Mode().IsRegular() || time.Since(info.ModTime()) <= 10*time.Minute {
+				return nil, ErrSessionExists
+			}
+			if removeErr := os.Remove(lock); removeErr != nil {
+				return nil, removeErr
+			}
+		} else if !errors.Is(statErr, fs.ErrNotExist) {
+			return nil, statErr
+		}
+		file, err = create()
+		if errors.Is(err, fs.ErrExist) {
+			return nil, ErrSessionExists
+		}
 	}
 	if err != nil {
 		return nil, err
