@@ -26,6 +26,9 @@ currently populate `extra` or `unknown` for all discarded fields.
 | ChatGPT export | active-branch text, calls/results, reasoning, model and title | hidden UI messages, alternate branches, citations and product-specific metadata |
 | Simple JSON | every schema `1.0` field | unknown object fields are rejected by archives; unsupported native targets warn on omission |
 
+Claude Code store discovery and writes honor `CLAUDE_CONFIG_DIR`; otherwise the
+store root is `~/.claude/projects`.
+
 Images are carried only when the destination has a compatible URL or media
 representation. Plain thinking without a native signature is converted to
 visible assistant text for Claude Code; redacted thinking remains redacted.

@@ -106,9 +106,9 @@ A `.moirai` archive is a JSON envelope:
 
 The digest input is the schema-known transcript after strict decoding: object
 keys are recursively sorted, strings are UTF-8 JSON strings without HTML
-escaping, numbers use a fixed 17-digit IEEE-754 exponent form, and no whitespace
-is included. Unknown transcript fields are rejected. This canonical form is
-identical in the Go and TypeScript SDKs.
+escaping, numbers use ECMAScript's shortest round-trip `Number::toString` form,
+and no whitespace is included. Unknown transcript fields are rejected. This
+canonical form is identical in the Go and TypeScript SDKs.
 
 The digest protects integrity, not authenticity or confidentiality. Verify it
 before accepting the transcript, and protect the archive separately in storage

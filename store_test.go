@@ -53,6 +53,36 @@ func TestLocalFileStoreLifecycle(t *testing.T) {
 	}
 }
 
+func TestDefaultStoresHonorClaudeConfigDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	for _, test := range []struct {
+		name       string
+		configDir  string
+		wantedRoot string
+	}{
+		{name: "default", wantedRoot: filepath.Join(home, ".claude", "projects")},
+		{name: "override", configDir: filepath.Join(home, "claude-custom"), wantedRoot: filepath.Join(home, "claude-custom", "projects")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("CLAUDE_CONFIG_DIR", test.configDir)
+			registry, err := DefaultStores()
+			if err != nil {
+				t.Fatal(err)
+			}
+			store, err := registry.Store(FormatClaudeCode)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if store.Root() != test.wantedRoot {
+				t.Fatalf("Claude root = %q, want %q", store.Root(), test.wantedRoot)
+			}
+		})
+	}
+}
+
 func TestStoreRejectsTraversalAndSymlinks(t *testing.T) {
 	root := t.TempDir()
 	if _, err := checkedPath(root, "../outside", false); !errors.Is(err, ErrUnsafePath) {

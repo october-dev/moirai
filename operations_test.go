@@ -1,11 +1,41 @@
 package moirai
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestCanonicalJSONNumbersMatchECMAScript(t *testing.T) {
+	for _, test := range []struct {
+		input string
+		want  string
+	}{
+		{input: "0", want: "0"},
+		{input: "-0", want: "0"},
+		{input: "1", want: "1"},
+		{input: "0.1", want: "0.1"},
+		{input: "1e21", want: "1e+21"},
+		{input: "1e20", want: "100000000000000000000"},
+		{input: "0.000001", want: "0.000001"},
+		{input: "1e-7", want: "1e-7"},
+		{input: "5e-324", want: "5e-324"},
+		{input: "1.7976931348623157e308", want: "1.7976931348623157e+308"},
+		{input: "1.490116119384765625e-8", want: "1.4901161193847656e-8"},
+		{input: "123456789012345678", want: "123456789012345680"},
+		{input: "0.30000000000000004", want: "0.30000000000000004"},
+	} {
+		got, err := canonicalJSONNumber(json.Number(test.input))
+		if err != nil {
+			t.Fatalf("canonicalJSONNumber(%s): %v", test.input, err)
+		}
+		if got != test.want {
+			t.Errorf("canonicalJSONNumber(%s) = %s, want %s", test.input, got, test.want)
+		}
+	}
+}
 
 func fixtureTranscript() *Transcript {
 	return &Transcript{SchemaVersion: SchemaVersion, Meta: Metadata{ID: "session", Timestamp: "2026-01-01T00:00:00Z", CWD: "/tmp/work"}, Messages: []Message{

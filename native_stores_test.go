@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestBundleStoreLifecycle(t *testing.T) {
@@ -47,6 +48,53 @@ func TestBundleStoreLifecycle(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBundleStoreReservationLocks(t *testing.T) {
+	newStore := func(t *testing.T, root string) *BundleStore {
+		t.Helper()
+		store, err := NewBundleStore(FormatFX, root, func(dir string) bool {
+			return fileExists(filepath.Join(dir, "events.jsonl"))
+		}, fxBundleRead, fxBundleWrite, flatBundleLayout)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return store
+	}
+
+	t.Run("stale lock is recovered", func(t *testing.T) {
+		root := t.TempDir()
+		transcript := nativeFixture(t)
+		lock := filepath.Join(root, transcript.Meta.ID) + ".moirai-create"
+		if err := os.WriteFile(lock, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-time.Hour)
+		if err := os.Chtimes(lock, old, old); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := newStore(t, root).Save(context.Background(), transcript, RenderOptions{Limits: DefaultLimits()}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Lstat(lock); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("stale lock remains: %v", err)
+		}
+	})
+
+	t.Run("fresh lock is preserved", func(t *testing.T) {
+		root := t.TempDir()
+		transcript := nativeFixture(t)
+		lock := filepath.Join(root, transcript.Meta.ID) + ".moirai-create"
+		if err := os.WriteFile(lock, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := newStore(t, root).Save(context.Background(), transcript, RenderOptions{Limits: DefaultLimits()}); !errors.Is(err, ErrSessionExists) {
+			t.Fatalf("fresh lock error = %v", err)
+		}
+		if _, err := os.Lstat(lock); err != nil {
+			t.Fatalf("fresh lock removed: %v", err)
+		}
+	})
 }
 
 func TestAntigravityStoreLifecycle(t *testing.T) {

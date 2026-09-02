@@ -294,7 +294,8 @@ func DefaultStores() (*StoreRegistry, error) {
 		}
 		return registry.Register(store)
 	}
-	claudeRoot := filepath.Join(home, ".claude", "projects")
+	claudeHome := envOr("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	claudeRoot := filepath.Join(claudeHome, "projects")
 	if err := add(NewLocalFileStore(FormatClaudeCode, claudeRoot, ".jsonl", claudeLayout)); err != nil {
 		return nil, err
 	}
@@ -455,12 +456,19 @@ func encodeWorkspace(cwd string) string {
 
 func encodeClaudeProject(cwd string) string {
 	if cwd == "" {
-		cwd = string(filepath.Separator)
+		return "-"
 	}
-	if runtime.GOOS == "windows" {
-		cwd = strings.TrimPrefix(cwd, `\\?\`)
+	cwd = strings.TrimPrefix(cwd, `\\?\`)
+	var encoded strings.Builder
+	encoded.Grow(len(cwd))
+	for _, char := range cwd {
+		if char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9' {
+			encoded.WriteRune(char)
+		} else {
+			encoded.WriteByte('-')
+		}
 	}
-	return strings.NewReplacer("/", "-", ".", "-", "\\", "-", ":", "-").Replace(cwd)
+	return encoded.String()
 }
 
 func URLWorkspace(cwd string) string { return url.PathEscape(cwd) }
