@@ -18,8 +18,78 @@ and can launch the destination harness. Messages, tool calls and results,
 reasoning that the source explicitly stored, images, artifacts, usage, workspace
 metadata, and ancestry survive when the destination can represent them.
 
-It is a local-first Go library and CLI with a typed TypeScript SDK. There is no
-Moirai account, daemon, hosted service, or credential collector.
+It is a local-first Go library and CLI with a typed TypeScript SDK. The
+open-source tools require no Moirai account, daemon, hosted service, or
+credential collector.
+
+## Free and hosted versions
+
+Moirai is building a collaboration layer for agent work—something like GitHub
+for agent sessions. Local sessions remain ordinary files under your control,
+while an optional hosted service will make those sessions shareable and
+collaborative across people, machines, and agent harnesses. The model is
+similar to Git: work locally for free, publish only what you choose, and use a
+remote when you want distribution and collaboration.
+
+### Open source: free and local
+
+The CLI, Go library, canonical schema, and TypeScript SDK in this repository
+are free and open source. They discover and convert sessions on the same
+machine without sending them to October. You can:
+
+- continue a session in another supported harness;
+- create portable, integrity-checked `.moirai` archives;
+- move an archive to another machine using storage or transport you control;
+- build integrations directly on the Go and TypeScript APIs; and
+- keep working without an account, hosted dependency, or usage plan.
+
+This local version is the foundation of Moirai, not a limited client for the
+hosted product. It remains useful on its own and keeps session data under the
+user's control.
+
+### Moirai Cloud: free and paid hosted plans (planned)
+
+Moirai Cloud will be the optional managed remote for agent sessions. It is
+intended for people who want cross-machine sharing and collaboration without
+operating storage, APIs, servers, or deployment infrastructure themselves. A
+free hosted tier and paid plans are planned; exact limits, pricing, and launch
+availability will be published before the service opens.
+
+The planned hosted workflow is:
+
+1. A user explicitly publishes a selected session checkpoint and receives a
+   shareable link.
+2. Someone on another machine opens that link, chooses a supported harness,
+   and continues the session as a new local session.
+3. A user can fork a shared session at a checkpoint and explore a different
+   approach without changing the original.
+4. Contributors can share work derived from a session back with its owner,
+   while Moirai retains the ancestry needed to understand where it came from.
+
+The analogy to Git is about workflow, not storage format:
+
+| Agent workflow | Git-like idea |
+| --- | --- |
+| Local harness session | Working copy |
+| Portable session checkpoint | Commit |
+| Published hosted session | Remote history |
+| Continue from a shareable link | Clone and check out |
+| Start an independent continuation | Fork or branch |
+| Share derived agent work with the owner | Contribution based on common ancestry |
+
+Hosted collaboration will build on the same canonical transcript and
+provenance model as the local tools. Receiving a shared session will create a
+new destination session rather than overwrite the publisher's original.
+Different harnesses still expose different runtime state, so hosted handoffs
+will report the same compatibility warnings and continuity boundary described
+below.
+
+Local discovery never implies cloud upload. Publishing will be an explicit
+action because agent histories may contain source code, tool output,
+credentials, or other sensitive material. Visibility, access, retention, and
+security behavior for hosted sessions will be documented before launch. Until
+then, the hosted capabilities described here are product direction, not a
+claim that the service is currently available.
 
 ## Install
 
@@ -262,6 +332,11 @@ destination harness's own store. External dependencies: the `moirai` CLI and
 the destination harness itself.
 
 ## Contributing
+
+Looking for a place to start? Browse the
+[`good first issue`](https://github.com/october-dev/moirai/labels/good%20first%20issue)
+and [`help wanted`](https://github.com/october-dev/moirai/labels/help%20wanted)
+queues. Each issue defines its expected behavior, safety boundary, and tests.
 
 Run the complete local checks before opening a pull request:
 
