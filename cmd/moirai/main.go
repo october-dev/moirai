@@ -42,6 +42,8 @@ func (a app) run(ctx context.Context, args []string) error {
 	case "version", "--version":
 		fmt.Fprintln(a.out, version)
 		return nil
+	case "completion":
+		return a.completion(args[1:])
 	case "formats":
 		return a.formats(args[1:])
 	case "inspect":
@@ -73,6 +75,7 @@ func (a app) usage() {
 	fmt.Fprintln(a.err, `Moirai moves resumable AI-agent sessions between supported harnesses.
 
 Usage:
+  moirai completion <bash|zsh|fish>
   moirai formats [--json]
   moirai inspect <file|-> [--from format] [--json]
   moirai convert <file|-> --to format [--from format] [--out file]

@@ -111,6 +111,45 @@ To build the CLI from source:
 go build -o moirai ./cmd/moirai
 ```
 
+### Shell completion
+
+Generate and install the script for your shell:
+
+Bash (load it from `~/.bashrc`):
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+moirai completion bash > ~/.local/share/bash-completion/completions/moirai
+# Add this line to ~/.bashrc:
+source ~/.local/share/bash-completion/completions/moirai
+```
+
+Zsh (put the completion directory on `fpath` before running `compinit` in
+`~/.zshrc`):
+
+```zsh
+mkdir -p ~/.zsh/completions
+moirai completion zsh > ~/.zsh/completions/_moirai
+# Add these lines to ~/.zshrc (or adjust your existing compinit setup):
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit
+compinit
+```
+
+Fish (automatically loads scripts from this directory):
+
+```fish
+mkdir -p ~/.config/fish/completions
+moirai completion fish > ~/.config/fish/completions/moirai.fish
+```
+
+Start a new shell after installation. Regenerate the installed script after
+upgrading Moirai to refresh command, flag, and format suggestions.
+
+Generating or using completions performs no session-store discovery and never
+invokes the moirai binary at completion time. File arguments use your shell's
+filename completion; session IDs and search queries are not discovered.
+
 ## Continue a session
 
 List sessions that are already on the machine:
