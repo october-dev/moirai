@@ -1,1 +1,21 @@
-{"summary":{"info":{"id":"native-grok","cwd":"/tmp/project"},"created_at":"2026-01-01T00:00:00Z","generated_title":"Native fixture","current_model_id":"model-a"},"chat_history":[{"type":"user","content":[{"type":"text","text":"native fixture"}]}],"updates":[]}
+{
+  "summary": {
+    "info": {"id": "native-grok", "cwd": "/tmp/invented-grok-project"},
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:05:00Z",
+    "generated_title": "Invented Grok fixture",
+    "session_summary": "Fallback fixture title",
+    "current_model_id": "fixture-session-model",
+    "head_branch": "fixture/invented"
+  },
+  "chat_history": [
+    {"type": "user", "content": [{"type": "text", "text": "Inspect this invented native fixture."}]},
+    {"type": "reasoning", "summary": [{"type": "summary_text", "text": "I will inspect the invented sample."}], "encrypted_content": "invented-encrypted-reasoning"},
+    {"type": "assistant", "content": "Reading the sample now.", "tool_calls": [{"id": "fixture-call-1", "name": "read_sample", "arguments": "{\"path\":\"sample.txt\",\"lines\":2}"}], "model_id": "fixture-assistant-model"},
+    {"type": "tool_result", "tool_call_id": "fixture-call-1", "content": "Invented sample contents."},
+    {"type": "tool_result", "tool_call_id": "fixture-unknown-call", "content": "Omit this unpaired result."}
+  ],
+  "updates": [
+    {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "UPDATES_ONLY_INVENTED_GROK_MARKER"}}
+  ]
+}
