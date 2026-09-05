@@ -29,6 +29,8 @@ currently populate `extra` or `unknown` for all discarded fields.
 Claude Code store discovery and writes honor `CLAUDE_CONFIG_DIR`; otherwise the
 store root is `~/.claude/projects`.
 
+See the [Claude Code adapter reference](harnesses/claude-code.md).
+
 Images are carried only when the destination has a compatible URL or media
 representation. Plain thinking without a native signature is converted to
 visible assistant text for Claude Code; redacted thinking remains redacted.

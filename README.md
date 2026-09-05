@@ -171,6 +171,8 @@ harness. Source-only stores are never modified.
 Claude Code discovery and writes honor `CLAUDE_CONFIG_DIR`; otherwise Moirai
 uses `~/.claude/projects`.
 
+See the [Claude Code adapter reference](docs/harnesses/claude-code.md).
+
 Run `moirai formats` or `moirai formats --json` for the machine-readable
 capability registry.
 
