@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -163,6 +164,107 @@ func TestArchiveCreateAndVerify(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"valid": true`) {
 		t.Fatalf("unexpected verify result: %s", stdout.String())
+	}
+}
+
+func TestArchiveInspect(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "session.json")
+	archive := filepath.Join(dir, "session.moirai")
+	source := `{"id":"inspect-me","timestamp":"2026-09-01T00:00:00Z","cwd":"/tmp/project","title":"Refactor","model":"test-model","messages":[{"role":"user","content":"secret needle text"},{"role":"assistant","content":[{"type":"thinking","text":"hidden reasoning needle"},{"type":"tool_use","name":"Bash","input":{"command":"secret tool needle"}}]}]}`
+	if err := os.WriteFile(input, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	a := app{out: &stdout, err: &stderr}
+	if err := a.run(context.Background(), []string{"archive", "create", input, "--out", archive}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Human-readable output carries structural metadata and no transcript content.
+	stdout.Reset()
+	if err := a.run(context.Background(), []string{"archive", "inspect", archive}); err != nil {
+		t.Fatal(err)
+	}
+	human := stdout.String()
+	for _, want := range []string{"Format: moirai.session", "Schema version:", "Digest: valid", "ID: inspect-me", "Title: Refactor", "Working directory: /tmp/project", "Model: test-model", "Messages: 2", "Blocks:"} {
+		if !strings.Contains(human, want) {
+			t.Fatalf("human output missing %q:\n%s", want, human)
+		}
+	}
+	for _, leak := range []string{"secret needle text", "hidden reasoning needle", "secret tool needle"} {
+		if strings.Contains(human, leak) {
+			t.Fatalf("human output leaked transcript content %q:\n%s", leak, human)
+		}
+	}
+
+	// JSON output is machine-readable and likewise carries no block payloads.
+	stdout.Reset()
+	if err := a.run(context.Background(), []string{"archive", "inspect", archive, "--json"}); err != nil {
+		t.Fatal(err)
+	}
+	var summary struct {
+		Format        string         `json:"format"`
+		SchemaVersion string         `json:"schema_version"`
+		Valid         bool           `json:"valid"`
+		ID            string         `json:"id"`
+		Messages      int            `json:"messages"`
+		Blocks        map[string]int `json:"blocks"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &summary); err != nil {
+		t.Fatalf("inspect --json is not valid JSON: %v\n%s", err, stdout.String())
+	}
+	if summary.Format != "moirai.session" || !summary.Valid || summary.ID != "inspect-me" || summary.Messages != 2 {
+		t.Fatalf("unexpected summary: %#v", summary)
+	}
+	if summary.Blocks["text"] != 1 || summary.Blocks["thinking"] != 1 || summary.Blocks["tool_use"] != 1 {
+		t.Fatalf("unexpected block counts: %#v", summary.Blocks)
+	}
+	for _, leak := range []string{"secret needle text", "hidden reasoning needle", "secret tool needle"} {
+		if strings.Contains(stdout.String(), leak) {
+			t.Fatalf("JSON output leaked transcript content %q:\n%s", leak, stdout.String())
+		}
+	}
+}
+
+func TestArchiveInspectRejectsTamperedAndOversized(t *testing.T) {
+	dir := t.TempDir()
+	input := filepath.Join(dir, "session.json")
+	archive := filepath.Join(dir, "session.moirai")
+	if err := os.WriteFile(input, []byte(`{"id":"tamper","messages":[{"role":"user","content":"hello"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	a := app{out: &stdout, err: &stderr}
+	if err := a.run(context.Background(), []string{"archive", "create", input, "--out", archive}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Tampering with the stored transcript invalidates the digest.
+	data, err := os.ReadFile(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := bytes.Replace(data, []byte("hello"), []byte("HELLO"), 1)
+	if err := os.WriteFile(archive, tampered, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.run(context.Background(), []string{"archive", "inspect", archive}); !errors.Is(err, moirai.ErrIntegrity) {
+		t.Fatalf("tampered archive: err = %v, want ErrIntegrity", err)
+	}
+
+	// An oversized input is rejected by the existing limit before decoding.
+	if err := a.run(context.Background(), []string{"archive", "inspect", archive, "--max-input-bytes", "16"}); !errors.Is(err, moirai.ErrLimitExceeded) {
+		t.Fatalf("oversized archive: err = %v, want ErrLimitExceeded", err)
+	}
+
+	// An unsupported version returns the existing typed error.
+	unsupported := filepath.Join(dir, "unsupported.moirai")
+	if err := os.WriteFile(unsupported, []byte(`{"format":"moirai.session","version":"999","created_at":"2026-09-01T00:00:00Z","transcript":{},"sha256":"00"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.run(context.Background(), []string{"archive", "inspect", unsupported}); !errors.Is(err, moirai.ErrUnsupportedVersion) {
+		t.Fatalf("unsupported version: err = %v, want ErrUnsupportedVersion", err)
 	}
 }
 

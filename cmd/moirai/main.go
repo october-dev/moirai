@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -126,7 +127,8 @@ Usage:
   moirai continue <file|session-id> --with format [--from format] [--no-launch] [--dry-run] [--json]
   moirai delete <session-id> --format format --yes
   moirai archive create <file|-> [--from format] --out file.moirai
-  moirai archive verify <file.moirai>`)
+  moirai archive verify <file.moirai>
+  moirai archive inspect <file.moirai> [--json]`)
 }
 
 func newFlags(name string, stderr io.Writer) *flag.FlagSet {
@@ -649,7 +651,7 @@ func (a app) delete(ctx context.Context, args []string) error {
 
 func (a app) archive(args []string) error {
 	if len(args) == 0 {
-		return errors.New("archive requires create or verify")
+		return errors.New("archive requires create, verify, or inspect")
 	}
 	switch args[0] {
 	case "create":
@@ -693,9 +695,113 @@ func (a app) archive(args []string) error {
 			return err
 		}
 		return writeJSON(a.out, map[string]any{"valid": true, "id": transcript.Meta.ID, "messages": len(transcript.Messages)})
+	case "inspect":
+		fs := newFlags("archive inspect", a.err)
+		asJSON := fs.Bool("json", false, "emit JSON")
+		maxInput := fs.Int64("max-input-bytes", 0, "maximum archive bytes")
+		if err := parseFlags(fs, args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return errors.New("archive inspect requires one archive")
+		}
+		limits := inputLimits(*maxInput)
+		data, err := readInput(fs.Arg(0), limits.MaxInputBytes)
+		if err != nil {
+			return err
+		}
+		transcript, err := moirai.DecodeArchive(data, limits)
+		if err != nil {
+			return err
+		}
+		return a.printArchiveInspect(transcript, *asJSON)
 	default:
 		return fmt.Errorf("unknown archive operation %q", args[0])
 	}
+}
+
+// printArchiveInspect renders only structural metadata. Conversation text,
+// reasoning, tool payloads, media data, and artifact content are never printed.
+func (a app) printArchiveInspect(transcript *moirai.Transcript, asJSON bool) error {
+	meta := transcript.Meta
+	blocks := map[moirai.BlockType]int{}
+	for _, message := range transcript.Messages {
+		for _, block := range message.Content {
+			blocks[block.Type]++
+		}
+	}
+	summary := struct {
+		Format        string             `json:"format"`
+		SchemaVersion string             `json:"schema_version"`
+		Valid         bool               `json:"valid"`
+		ID            string             `json:"id"`
+		Title         string             `json:"title,omitempty"`
+		Timestamp     string             `json:"timestamp,omitempty"`
+		UpdatedAt     string             `json:"updated_at,omitempty"`
+		CWD           string             `json:"cwd,omitempty"`
+		Model         string             `json:"model,omitempty"`
+		Provenance    *moirai.Provenance `json:"provenance,omitempty"`
+		Messages      int                `json:"messages"`
+		Blocks        map[string]int     `json:"blocks,omitempty"`
+	}{
+		Format:        "moirai.session",
+		SchemaVersion: transcript.SchemaVersion,
+		Valid:         true,
+		ID:            meta.ID,
+		Title:         meta.Title,
+		Timestamp:     meta.Timestamp,
+		UpdatedAt:     meta.UpdatedAt,
+		CWD:           meta.CWD,
+		Model:         meta.Model,
+		Provenance:    meta.Provenance,
+		Messages:      len(transcript.Messages),
+	}
+	if len(blocks) > 0 {
+		summary.Blocks = map[string]int{}
+		for blockType, count := range blocks {
+			summary.Blocks[string(blockType)] = count
+		}
+	}
+	if asJSON {
+		return writeJSON(a.out, summary)
+	}
+	fmt.Fprintf(a.out, "Format: %s\nSchema version: %s\nDigest: valid\nID: %s\n", summary.Format, moirai.ScrubTerminal(summary.SchemaVersion), moirai.ScrubTerminal(summary.ID))
+	if summary.Title != "" {
+		fmt.Fprintln(a.out, "Title:", moirai.ScrubTerminal(summary.Title))
+	}
+	if summary.Timestamp != "" {
+		fmt.Fprintln(a.out, "Started:", moirai.ScrubTerminal(summary.Timestamp))
+	}
+	if summary.UpdatedAt != "" {
+		fmt.Fprintln(a.out, "Updated:", moirai.ScrubTerminal(summary.UpdatedAt))
+	}
+	if summary.CWD != "" {
+		fmt.Fprintln(a.out, "Working directory:", moirai.ScrubTerminal(summary.CWD))
+	}
+	if summary.Model != "" {
+		fmt.Fprintln(a.out, "Model:", moirai.ScrubTerminal(summary.Model))
+	}
+	if summary.Provenance != nil && summary.Provenance.SourceFormat != "" {
+		fmt.Fprintf(a.out, "Source: %s (%s)\n", moirai.ScrubTerminal(string(summary.Provenance.SourceFormat)), moirai.ScrubTerminal(summary.Provenance.SourceSessionID))
+	}
+	fmt.Fprintf(a.out, "Messages: %d\n", summary.Messages)
+	if len(summary.Blocks) > 0 {
+		fmt.Fprintf(a.out, "Blocks: %s\n", moirai.ScrubTerminal(formatBlockCounts(summary.Blocks)))
+	}
+	return nil
+}
+
+func formatBlockCounts(blocks map[string]int) string {
+	keys := make([]string, 0, len(blocks))
+	for key := range blocks {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", key, blocks[key]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func loadStored(ctx context.Context, selector string, format moirai.Format, limits moirai.Limits) (*moirai.ParseResult, error) {

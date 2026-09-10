@@ -55,6 +55,7 @@ var completionCommands = []commandSpec{
 	{name: "archive", positional: "archive-subcommand", subcommands: []commandSpec{
 		{name: "create", positional: "file", flags: []flagSpec{{"from", formatValue}, {"out", fileValue}, {"max-input-bytes", opaqueValue}}},
 		{name: "verify", positional: "file", flags: []flagSpec{{"max-input-bytes", opaqueValue}}},
+		{name: "inspect", positional: "file", flags: []flagSpec{{"json", boolValue}, {"max-input-bytes", opaqueValue}}},
 	}},
 	{name: "completion", positional: "shell-enum"},
 }

@@ -252,7 +252,15 @@ integrity digest:
 ```bash
 moirai archive create session.json --out session.moirai
 moirai archive verify session.moirai
+moirai archive inspect session.moirai
+moirai archive inspect session.moirai --json
 ```
+
+`archive inspect` verifies the archive and prints only structural metadata —
+format and schema versions, digest status, session ID, provenance, title,
+timestamps, working directory, model, message count, and block counts by type.
+Conversation text, reasoning, tool payloads, media data, and artifact content
+are never printed.
 
 Deletion is deliberately explicit:
 
