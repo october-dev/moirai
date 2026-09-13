@@ -76,7 +76,8 @@ func (r *Registry) Convert(data []byte, from, to Format, opts ParseOptions) (*Re
 	if err != nil {
 		return nil, &FormatError{Format: from, Op: "parse", Err: err}
 	}
-	if from != to {
+	plainRoundTrip := parsed.Transcript.SchemaVersion == ChatSchemaVersion && (to == FormatSimple || to == FormatChat || to == FormatConcord)
+	if from != to && !plainRoundTrip {
 		original := parsed.Transcript.Meta.ID
 		id, idErr := NewID()
 		if idErr != nil {

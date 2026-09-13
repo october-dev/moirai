@@ -1,0 +1,16 @@
+{
+  "model": "example/model-v1",
+  "provider": "example-provider",
+  "gateway": "local-gateway",
+  "title": "A normal conversation",
+  "created_at": "2026-09-01T12:00:00.123456789Z",
+  "updated_at": "2026-09-01T12:01:00Z",
+  "usage": {"prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21},
+  "messages": [
+    {"id": "s1", "role": "system", "content": "Be concise."},
+    {"id": "u1", "role": "user", "content": [{"type": "text", "text": "Describe this."}, {"type": "image_url", "image_url": {"url": "https://example.invalid/image.png", "detail": "low"}}], "attachments": [{"name": "notes.txt", "source": {"type": "text", "text": "Some notes"}}]},
+    {"id": "a1", "role": "assistant", "model": "example/model-v1", "created_at": "2026-09-01T12:01:00Z", "content": "An example image.", "usage": {"prompt_tokens": 12, "completion_tokens": 9, "total_tokens": 21}},
+    {"role": "user", "content": ""},
+    {"role": "assistant", "content": [], "attachments": [], "usage": {}}
+  ]
+}

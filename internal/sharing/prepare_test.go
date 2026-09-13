@@ -32,3 +32,14 @@ func TestPreparePreservesSourceAndToolPairs(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPrepareKeepsEmptyChatMessage(t *testing.T) {
+	source := &moirai.Transcript{SchemaVersion: moirai.ChatSchemaVersion, Meta: moirai.Metadata{ID: "empty-chat"}, Messages: []moirai.Message{{Role: moirai.RoleUser, Content: []moirai.Block{}}}}
+	prepared, report, err := Prepare(source, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(prepared.Messages) != 1 || len(prepared.Messages[0].Content) != 0 || report.ThinkingRemoved != 0 {
+		t.Fatal("empty chat was rewritten as omitted thinking")
+	}
+}

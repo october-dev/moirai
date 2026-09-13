@@ -51,7 +51,7 @@ func Prepare(t *moirai.Transcript, includeThinking bool) (*moirai.Transcript, Re
 			}
 			blocks = append(blocks, block)
 		}
-		if len(blocks) == 0 {
+		if len(blocks) == 0 && (copy.SchemaVersion != moirai.ChatSchemaVersion || len(copy.Messages[i].Content) > 0) {
 			blocks = append(blocks, moirai.Block{Type: moirai.BlockText, Text: "[Thinking omitted]"})
 		}
 		copy.Messages[i].Content = blocks

@@ -18,7 +18,7 @@ func Validate(t *Transcript, limits Limits) error {
 	if t.SchemaVersion == "" {
 		return fmt.Errorf("%w: schema_version is required", ErrInvalidTranscript)
 	}
-	if t.SchemaVersion != SchemaVersion {
+	if t.SchemaVersion != SchemaVersion && t.SchemaVersion != ChatSchemaVersion {
 		return fmt.Errorf("%w: %s", ErrUnsupportedVersion, t.SchemaVersion)
 	}
 	if strings.TrimSpace(t.Meta.ID) == "" {
@@ -61,7 +61,7 @@ func Validate(t *Transcript, limits Limits) error {
 	uses := map[string]string{}
 	for mi := range t.Messages {
 		m := &t.Messages[mi]
-		if m.Role != RoleUser && m.Role != RoleAssistant {
+		if m.Role != RoleUser && m.Role != RoleAssistant && !(m.Role == RoleSystem && t.SchemaVersion == ChatSchemaVersion) {
 			return fmt.Errorf("%w: messages[%d].role", ErrInvalidTranscript, mi)
 		}
 		if err := validTime(fmt.Sprintf("messages[%d].timestamp", mi), m.Timestamp); err != nil {

@@ -24,6 +24,24 @@ It is a local-first Go library and CLI with a typed TypeScript SDK. The
 open-source tools require no Moirai account, daemon, hosted service, or
 credential collector.
 
+## Ordinary chats, too
+
+Moirai also handles plain `system` / `user` / `assistant` conversations. Import
+OpenAI-style chat JSON or discover Concord's saved chats, preserve message order
+and model information, and create portable `.moirai` archives—all locally.
+
+```sh
+moirai list --format concord
+moirai convert conversation.json --from chat --to simple --out canonical.json
+moirai archive create conversation.json --from chat --out conversation.moirai
+moirai continue conversation.moirai --with chat
+```
+
+The `chat` destination saves local JSON without starting a process. The Concord
+destination stages a new import file and opens the app's confirmation dialog on
+macOS; it never rewrites the app's live database. See [chat formats and setup](docs/CHAT.md)
+for the required Concord build, exact round-trip contract, and degradation warnings.
+
 ## Free and hosted versions
 
 Use Moirai locally to switch harnesses, or use the optional Cloud service to

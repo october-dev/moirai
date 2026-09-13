@@ -46,8 +46,20 @@ func (SimpleCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 	if err := decodeJSONDocument(data, &doc, limits); err != nil {
 		return nil, err
 	}
-	if doc.SchemaVersion != "" && doc.SchemaVersion != SchemaVersion {
+	if doc.SchemaVersion != "" && doc.SchemaVersion != SchemaVersion && doc.SchemaVersion != ChatSchemaVersion {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedVersion, doc.SchemaVersion)
+	}
+	// Canonical chat documents must not pass through the legacy loose importer:
+	// it normalizes roles and fills missing timestamps.
+	if doc.SchemaVersion == ChatSchemaVersion {
+		var t Transcript
+		if err := decodeTranscriptStrict(data, &t); err != nil {
+			return nil, err
+		}
+		if err := Validate(&t, limits); err != nil {
+			return nil, err
+		}
+		return &ParseResult{Transcript: &t}, nil
 	}
 	if len(doc.Messages) == 0 || string(doc.Messages) == "null" {
 		return nil, fmt.Errorf("%w: messages array required", ErrInvalidTranscript)

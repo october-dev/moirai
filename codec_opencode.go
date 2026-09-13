@@ -172,10 +172,17 @@ func denormalizeOpenCodeTool(name string, input any) (string, any) {
 }
 
 func (OpenCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, OpenCodeCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
 	id := firstNonEmpty(opts.ID, t.Meta.ID)
+	provider, missingModel := "unknown", "unknown"
+	if t.SchemaVersion == ChatSchemaVersion {
+		provider, missingModel = t.Meta.ModelProvider, ""
+	}
 	if !strings.HasPrefix(id, "ses") {
 		id = "ses_" + strings.ReplaceAll(id, "-", "")
 	}
@@ -184,12 +191,12 @@ func (OpenCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, e
 	for i := 0; i < len(t.Messages); i++ {
 		message := t.Messages[i]
 		messageID := "msg_" + stableID("", id, fmt.Sprint(i))
-		stamp := epochMillis(firstNonEmpty(message.Timestamp, t.Meta.Timestamp))
+		stamp := nativeMillis(t, firstNonEmpty(message.Timestamp, t.Meta.Timestamp))
 		info := map[string]any{"id": messageID, "sessionID": id, "role": message.Role, "time": map[string]any{"created": stamp, "completed": stamp}}
 		var parts []any
 		if message.Role == RoleUser {
 			info["agent"] = "build"
-			info["model"] = map[string]any{"providerID": "unknown", "modelID": firstNonEmpty(message.Model, t.Meta.Model, "unknown")}
+			info["model"] = map[string]any{"providerID": provider, "modelID": firstNonEmpty(message.Model, t.Meta.Model, missingModel)}
 			lastUserID = messageID
 			for j, block := range message.Content {
 				partID := "prt_" + stableID("", messageID, fmt.Sprint(j))
@@ -203,8 +210,8 @@ func (OpenCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, e
 				}
 			}
 		} else {
-			info["modelID"] = firstNonEmpty(message.Model, t.Meta.Model, "unknown")
-			info["providerID"] = "unknown"
+			info["modelID"] = firstNonEmpty(message.Model, t.Meta.Model, missingModel)
+			info["providerID"] = provider
 			info["mode"] = "build"
 			info["agent"] = "build"
 			info["parentID"] = firstNonEmpty(lastUserID, messageID)
@@ -216,6 +223,15 @@ func (OpenCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, e
 			}
 			info["tokens"] = map[string]any{"input": usage.InputTokens, "output": usage.OutputTokens, "reasoning": 0, "cache": map[string]any{"read": usage.CacheReadInputTokens, "write": usage.CacheCreationInputTokens}}
 			parts = append(parts, map[string]any{"id": "prt_" + stableID("", messageID, "start"), "sessionID": id, "messageID": messageID, "type": "step-start"})
+			if t.SchemaVersion == ChatSchemaVersion {
+				parts = nil
+				info["finish"] = message.StopReason
+				if message.Usage == nil {
+					delete(info, "tokens")
+				} else {
+					delete(info["tokens"].(map[string]any), "reasoning")
+				}
+			}
 			for j, block := range message.Content {
 				partID := "prt_" + stableID("", messageID, fmt.Sprint(j))
 				switch block.Type {
@@ -247,7 +263,7 @@ func (OpenCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, e
 		}
 		records = append(records, map[string]any{"info": info, "parts": parts})
 	}
-	document := map[string]any{"info": map[string]any{"id": id, "slug": "moirai-" + stableID("", id)[:8], "directory": t.Meta.CWD, "title": t.Meta.Title, "version": t.Meta.CLIVersion, "time": map[string]any{"created": epochMillis(t.Meta.Timestamp), "updated": epochMillis(firstNonEmpty(t.Meta.UpdatedAt, t.Meta.Timestamp))}, "model": map[string]any{"id": t.Meta.Model, "providerID": "unknown"}}, "messages": records}
+	document := map[string]any{"info": map[string]any{"id": id, "slug": "moirai-" + stableID("", id)[:8], "directory": t.Meta.CWD, "title": t.Meta.Title, "version": t.Meta.CLIVersion, "time": map[string]any{"created": nativeMillis(t, t.Meta.Timestamp), "updated": nativeMillis(t, firstNonEmpty(t.Meta.UpdatedAt, t.Meta.Timestamp))}, "model": map[string]any{"id": t.Meta.Model, "providerID": provider}}, "messages": records}
 	data, err := json.MarshalIndent(document, "", "  ")
 	if err != nil {
 		return nil, err

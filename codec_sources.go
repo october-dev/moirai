@@ -104,13 +104,16 @@ func (HermesCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 }
 
 func (HermesCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, HermesCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
 	var rows []any
 	rowID := 1
 	for _, message := range t.Messages {
-		stamp := float64(epochMillis(firstNonEmpty(message.Timestamp, t.Meta.Timestamp))) / 1000
+		stamp := nativeSeconds(t, firstNonEmpty(message.Timestamp, t.Meta.Timestamp))
 		if message.Role == RoleUser {
 			for _, block := range message.Content {
 				if block.Type == BlockToolResult {
@@ -143,7 +146,7 @@ func (HermesCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, err
 		rows = append(rows, row)
 		rowID++
 	}
-	document := map[string]any{"id": firstNonEmpty(opts.ID, t.Meta.ID), "source": "moirai", "model": t.Meta.Model, "started_at": float64(epochMillis(t.Meta.Timestamp)) / 1000, "cwd": t.Meta.CWD, "git_branch": t.Meta.GitBranch, "title": t.Meta.Title, "message_count": len(rows), "messages": rows}
+	document := map[string]any{"id": firstNonEmpty(opts.ID, t.Meta.ID), "source": "moirai", "model": t.Meta.Model, "started_at": nativeSeconds(t, t.Meta.Timestamp), "cwd": t.Meta.CWD, "git_branch": t.Meta.GitBranch, "title": t.Meta.Title, "message_count": len(rows), "messages": rows}
 	result, err := encodeObject(document)
 	return finalizeRender(t, FormatHermes, result, err)
 }
@@ -182,6 +185,9 @@ func (CoworkCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 }
 
 func (CoworkCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, CoworkCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
@@ -205,7 +211,7 @@ func (CoworkCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, err
 	if len(t.Messages) > 0 {
 		last = firstNonEmpty(t.Messages[len(t.Messages)-1].Timestamp, last)
 	}
-	body := map[string]any{"header": map[string]any{"sessionId": id, "cliSessionId": cliID, "processName": "claude", "cwd": t.Meta.CWD, "createdAt": epochMillis(t.Meta.Timestamp), "lastActivityAt": epochMillis(last), "model": t.Meta.Model, "title": t.Meta.Title, "isArchived": false}, "transcript": records, "audit": []any{}}
+	body := map[string]any{"header": map[string]any{"sessionId": id, "cliSessionId": cliID, "processName": "claude", "cwd": t.Meta.CWD, "createdAt": nativeMillis(t, t.Meta.Timestamp), "lastActivityAt": nativeMillis(t, last), "model": t.Meta.Model, "title": t.Meta.Title, "isArchived": false}, "transcript": records, "audit": []any{}}
 	result, err := encodeObject(body)
 	return finalizeRender(t, FormatCowork, result, err)
 }

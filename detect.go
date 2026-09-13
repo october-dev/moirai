@@ -22,6 +22,14 @@ func DetectFormatWithLimits(data []byte, limits Limits) (Format, error) {
 		return "", err
 	}
 	var value map[string]any
+	if bytes.HasPrefix(trimmed, []byte("[")) {
+		var items []map[string]any
+		if decodeJSONDocument(trimmed, &items, limits) == nil && len(items) > 0 {
+			if f, err := detectObject(items[0]); err == nil && f == FormatConcord {
+				return f, nil
+			}
+		}
+	}
 	if err := decodeJSONDocument(trimmed, &value, limits); err == nil {
 		return detectObject(value)
 	}
@@ -55,6 +63,9 @@ func DetectFormatWithLimits(data []byte, limits Limits) (Format, error) {
 }
 
 func detectObject(value map[string]any) (Format, error) {
+	if value["providerID"] != nil && value["createdAt"] != nil && value["updatedAt"] != nil && value["messages"] != nil {
+		return FormatConcord, nil
+	}
 	kind := stringValue(value["type"])
 	if kind == "session_meta" || kind == "turn_context" || kind == "response_item" || kind == "event_msg" {
 		return FormatCodex, nil
@@ -99,6 +110,35 @@ func detectObject(value map[string]any) (Format, error) {
 		return FormatAntigravity, nil
 	}
 	if value["messages"] != nil {
+		if value["schema_version"] == nil && value["meta"] == nil && value["model"] != nil {
+			if messages, ok := value["messages"].([]any); ok {
+				plain := true
+				for _, item := range messages {
+					m, ok := item.(map[string]any)
+					if !ok {
+						plain = false
+						break
+					}
+					if _, ok := m["content"].(string); !ok {
+						parts, ok := m["content"].([]any)
+						if !ok {
+							plain = false
+							break
+						}
+						for _, part := range parts {
+							p, ok := part.(map[string]any)
+							if !ok || p["type"] != "text" && p["type"] != "image_url" {
+								plain = false
+								break
+							}
+						}
+					}
+				}
+				if plain {
+					return FormatChat, nil
+				}
+			}
+		}
 		return FormatSimple, nil
 	}
 	return "", ErrUnknownFormat

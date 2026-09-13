@@ -2,6 +2,7 @@ import {
   DEFAULT_LIMITS, type Block, type Limits, type Message, MoiraiError, newId,
   type ParseResult, type RenderResult, SCHEMA_VERSION, type Transcript, type Warning, validate,
 } from "./model.js";
+import { assertTranscriptShape } from "./archive.js";
 
 export interface ParseOptions { limits?: Limits; sourceId?: string; now?: () => string }
 export interface Codec {
@@ -22,6 +23,11 @@ export class SimpleCodec implements Codec {
     catch (error) { throw new MoiraiError("invalid_transcript", `invalid JSON: ${String(error)}`); }
     if (!isRecord(decoded)) throw new MoiraiError("invalid_transcript", "document must be an object");
     const raw = decoded;
+    if (raw.schema_version === "1.1") {
+      assertTranscriptShape(raw);
+      validate(raw as unknown as Transcript, limits);
+      return { transcript: raw as unknown as Transcript, warnings: [] };
+    }
     if (raw.schema_version !== undefined && raw.schema_version !== SCHEMA_VERSION) throw new MoiraiError("unsupported_version", `schema_version must be ${SCHEMA_VERSION}`);
     if (!Array.isArray(raw.messages)) throw new MoiraiError("invalid_transcript", "messages array is required");
     const warnings: Warning[] = [];

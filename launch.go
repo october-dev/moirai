@@ -16,6 +16,22 @@ type LaunchCommand struct {
 
 func CommandFor(format Format, saved SessionRef) (LaunchCommand, error) {
 	switch format {
+	case FormatConcord:
+		if runtime.GOOS != "darwin" {
+			return LaunchCommand{}, ErrUnsupported
+		}
+		_, root, err := concordPaths()
+		if err != nil {
+			return LaunchCommand{}, err
+		}
+		if saved.Location == "" {
+			return LaunchCommand{Program: "open", Args: []string{"-b", "dev.october.concord"}}, nil
+		}
+		path, err := checkedPath(root, saved.Location, true)
+		if err != nil {
+			return LaunchCommand{}, err
+		}
+		return LaunchCommand{Program: "open", Args: []string{"-b", "dev.october.concord", path}}, nil
 	case FormatClaudeCode:
 		return LaunchCommand{Program: "claude", Args: []string{"--resume", saved.ID}, Dir: saved.CWD}, nil
 	case FormatCodex:

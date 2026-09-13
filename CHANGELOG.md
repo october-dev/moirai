@@ -6,6 +6,10 @@ by `schema_version`.
 
 ## 0.2.0 (unreleased)
 
+- Add first-class plain chats (canonical schema 1.1), generic chat JSON and
+  Concord adapters, lossless chat archives, safe local discovery/continuation,
+  explicit rich-session degradation, and TypeScript canonical chat support.
+
 - Add `--cwd`, `--since`, `--until`, and `--limit` filters to `moirai list`.
 - Raise the source-build Go requirement to 1.26.8.
 

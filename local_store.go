@@ -288,6 +288,20 @@ func DefaultStores() (*StoreRegistry, error) {
 		return nil, err
 	}
 	registry := NewStoreRegistry()
+	concordPath, concordImports, err := concordPaths()
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.Register(&ConcordStore{Path: concordPath, ImportDir: concordImports}); err != nil {
+		return nil, err
+	}
+	chat, err := NewLocalFileStore(FormatChat, envOr("MOIRAI_CHAT_DIR", filepath.Join(home, ".moirai", "chats")), ".json", flatJSONLayout)
+	if err != nil {
+		return nil, err
+	}
+	if err := registry.Register(chat); err != nil {
+		return nil, err
+	}
 	add := func(store *LocalFileStore, err error) error {
 		if err != nil {
 			return err

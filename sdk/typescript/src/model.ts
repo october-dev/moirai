@@ -1,13 +1,14 @@
 export const SCHEMA_VERSION = "1.0" as const;
+export const CHAT_SCHEMA_VERSION = "1.1" as const;
 
 export const FORMATS = [
   "simple", "claude_code", "codex", "pi", "amp", "opencode", "cursor",
   "cursor_desktop", "grok", "hermes", "antigravity", "campfire", "cowork",
-  "fx", "claude_chat", "chatgpt",
+  "fx", "claude_chat", "chatgpt", "chat", "concord",
 ] as const;
 
 export type Format = (typeof FORMATS)[number];
-export type Role = "user" | "assistant";
+export type Role = "system" | "user" | "assistant";
 export type BlockType = "text" | "thinking" | "tool_use" | "tool_result" | "image" | "artifact" | "unknown";
 
 export interface MediaSource { type: string; media_type?: string; data?: string; path?: string; url?: string; text?: string }
@@ -32,7 +33,7 @@ export interface Metadata {
   title?: string; model?: string; cli_version?: string; provenance?: Provenance; extra?: unknown;
   model_provider?: string;
 }
-export interface Transcript { schema_version: typeof SCHEMA_VERSION; meta: Metadata; messages: Message[]; extra?: unknown }
+export interface Transcript { schema_version: typeof SCHEMA_VERSION | typeof CHAT_SCHEMA_VERSION; meta: Metadata; messages: Message[]; extra?: unknown }
 export interface Warning { path?: string; code: string; message: string }
 export interface ParseResult { transcript: Transcript; warnings: Warning[] }
 export interface RenderResult { data: string; warnings: Warning[] }
@@ -57,7 +58,7 @@ export function newId(): string {
 }
 
 export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_LIMITS }): void {
-  if (!isRecord(transcript) || transcript.schema_version !== SCHEMA_VERSION) throw new MoiraiError("unsupported_version", `schema_version must be ${SCHEMA_VERSION}`);
+  if (!isRecord(transcript) || transcript.schema_version !== SCHEMA_VERSION && transcript.schema_version !== CHAT_SCHEMA_VERSION) throw new MoiraiError("unsupported_version", "schema_version must be 1.0 or 1.1");
   if (!isRecord(transcript.meta) || typeof transcript.meta.id !== "string" || !transcript.meta.id.trim()) throw new MoiraiError("invalid_transcript", "meta.id is required");
   requireOptionalStrings("meta", transcript.meta, ["timestamp", "updated_at", "cwd", "git_branch", "title", "model", "model_provider", "cli_version"]);
   if (transcript.meta.cwd && /[\u0000-\u001f\u007f-\u009f]/u.test(transcript.meta.cwd)) throw new MoiraiError("invalid_transcript", "meta.cwd contains control characters");
@@ -77,7 +78,7 @@ export function validate(transcript: Transcript, limits: Limits = { ...DEFAULT_L
   let blockCount = 0;
   transcript.messages.forEach((message, mi) => {
     if (!isRecord(message)) throw new MoiraiError("invalid_transcript", `messages[${mi}] must be an object`);
-    if (message.role !== "user" && message.role !== "assistant") throw new MoiraiError("invalid_transcript", `messages[${mi}].role is invalid`);
+    if (message.role !== "user" && message.role !== "assistant" && !(message.role === "system" && transcript.schema_version === CHAT_SCHEMA_VERSION)) throw new MoiraiError("invalid_transcript", `messages[${mi}].role is invalid`);
     requireOptionalStrings(`messages[${mi}]`, message, ["id", "timestamp", "model", "stop_reason"]);
     if (!Array.isArray(message.content)) throw new MoiraiError("invalid_transcript", `messages[${mi}].content must be an array`);
     validateTime(`messages[${mi}].timestamp`, message.timestamp);

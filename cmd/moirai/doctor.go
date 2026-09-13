@@ -31,6 +31,7 @@ type doctorRow struct {
 }
 
 var fileBackedFormats = map[moirai.Format]bool{
+	moirai.FormatConcord:  true,
 	moirai.FormatOpenCode: true,
 	moirai.FormatHermes:   true,
 }
@@ -207,6 +208,10 @@ func (r doctorRow) statusLine() string {
 // in precedence order, mirroring DefaultStores.
 func storeOverrides(format moirai.Format) []string {
 	switch format {
+	case moirai.FormatChat:
+		return []string{"MOIRAI_CHAT_DIR"}
+	case moirai.FormatConcord:
+		return []string{"CONCORD_CONVERSATIONS_FILE"}
 	case moirai.FormatClaudeCode:
 		return []string{"CLAUDE_CONFIG_DIR"}
 	case moirai.FormatCodex:

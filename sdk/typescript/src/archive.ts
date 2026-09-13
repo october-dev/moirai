@@ -171,7 +171,7 @@ function canonicalStringify(value: unknown): string {
   throw new MoiraiError("invalid_transcript", "archive transcript must contain only JSON values");
 }
 
-function assertTranscriptShape(value: Record<string, unknown>): void {
+export function assertTranscriptShape(value: Record<string, unknown>): void {
   assertKeys(value, ["schema_version", "meta", "messages", "extra"], "transcript");
   const meta = expectRecord(value.meta, "transcript.meta");
   assertKeys(meta, ["id", "timestamp", "updated_at", "cwd", "git_branch", "title", "model", "model_provider", "cli_version", "provenance", "extra"], "transcript.meta");
