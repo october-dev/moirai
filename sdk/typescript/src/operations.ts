@@ -82,9 +82,15 @@ export function toText(transcript: Transcript, options: TextOptions = {}): strin
   transcript.messages.forEach((message, messageIndex) => {
     const parts: string[] = [];
     for (const block of message.content) appendBlockText(parts, block, options);
-    if (parts.length) sections.push(`${message.role === "assistant" ? "Assistant" : "User"} [${messageIndex + 1}]: ${parts.join("\n")}`);
+    if (parts.length) sections.push(`${roleLabel(message.role)} [${messageIndex + 1}]: ${parts.join("\n")}`);
   });
   return boundedTail(sections.join("\n\n"), options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 64 << 10);
+}
+
+function roleLabel(role: string): string {
+  if (role === "assistant") return "Assistant";
+  if (role === "system") return "System";
+  return "User";
 }
 
 function appendBlockText(parts: string[], block: Block, options: TextOptions): void {

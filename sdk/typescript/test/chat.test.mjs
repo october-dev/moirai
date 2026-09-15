@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
-import { SimpleCodec, ClaudeCodeCodec, validate, encodeArchive, decodeArchive } from "../dist/index.js";
+import { SimpleCodec, ClaudeCodeCodec, validate, encodeArchive, decodeArchive, toText } from "../dist/index.js";
 
 test("canonical plain chat preserves system roles, empty messages and absent timestamps", async () => {
   const original = { schema_version: "1.1", meta: { id: "chat", model: "model", model_provider: "provider" }, messages: [
@@ -19,6 +19,7 @@ test("canonical plain chat preserves system roles, empty messages and absent tim
   const rendered = new ClaudeCodeCodec().render(original);
   assert(rendered.warnings.some(w => w.code === "system_role_flattened"));
   assert.equal(original.messages[0].role, "system");
+  assert.equal(toText(original), "System [1]: Be concise.\n\nAssistant [3]: Hi");
   assert.throws(() => codec.parse(JSON.stringify({ ...original, accidental: "not an extension" })), /unknown/);
   const ajv = new Ajv2020({ strict: false });
   addFormats(ajv);

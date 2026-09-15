@@ -83,9 +83,18 @@ func mcpFixture() *mcpTestStore {
 
 func mcpTestClient(t *testing.T, store *mcpTestStore) (context.Context, *mcp.ClientSession) {
 	t.Helper()
+	return mcpRegistryClient(t, moirai.NewStoreRegistry(store), func() {
+		if store.writes.Load() != 0 {
+			t.Error("MCP modified a store")
+		}
+	})
+}
+
+func mcpRegistryClient(t *testing.T, registry *moirai.StoreRegistry, check func()) (context.Context, *mcp.ClientSession) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	server, err := newMCPServer(moirai.NewStoreRegistry(store), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	server, err := newMCPServer(registry, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,9 +105,7 @@ func mcpTestClient(t *testing.T, store *mcpTestStore) (context.Context, *mcp.Cli
 	}
 	t.Cleanup(func() {
 		ss.Close()
-		if store.writes.Load() != 0 {
-			t.Error("MCP modified a store")
-		}
+		check()
 	})
 	client := mcp.NewClient(&mcp.Implementation{Name: "moirai-test", Version: "1"}, nil)
 	cs, err := client.Connect(ctx, ct, nil)
@@ -347,6 +354,85 @@ func TestMCPWarningsAndPanicRecovery(t *testing.T) {
 	}
 	if result := mcpCall(t, panicCtx, panicClient, "formats", nil); result.IsError {
 		t.Fatal("tool call after panic failed")
+	}
+}
+
+// Schema-1.1 plain chats and Concord conversations carry ordered system
+// messages; show_session must return them intact through the real stores.
+func TestMCPPlainChatAndConcordShowSession(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
+	t.Setenv("MOIRAI_CHAT_DIR", filepath.Join(root, "chats"))
+	t.Setenv("CONCORD_CONVERSATIONS_FILE", filepath.Join(root, "concord.json"))
+	t.Setenv("MOIRAI_CONCORD_IMPORT_DIR", filepath.Join(root, "concord-imports"))
+	if err := os.MkdirAll(filepath.Join(root, "chats"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	chat := []byte(`{"id":"plain-chat","title":"Plain chat","model":"m","messages":[{"role":"system","content":"Be concise."},{"role":"user","content":"Hello"},{"role":"assistant","content":"Hi"}]}`)
+	if err := os.WriteFile(filepath.Join(root, "chats", "plain-chat.json"), chat, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	concord := []byte(`[{"id":"11111111-1111-4111-8111-111111111111","providerID":"p","title":"Concord chat","model":"m","createdAt":"2026-09-01T12:00:00Z","updatedAt":"2026-09-01T12:01:00Z","messages":[{"id":"22222222-2222-4222-8222-222222222222","role":"system","text":"Be concise."},{"id":"33333333-3333-4333-8333-333333333333","role":"user","text":"Hello"},{"id":"44444444-4444-4444-8444-444444444444","role":"assistant","text":"Hi"}]}]`)
+	if err := os.WriteFile(filepath.Join(root, "concord.json"), concord, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := moirai.DefaultStores()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := func() map[string][]byte {
+		files := map[string][]byte{}
+		_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() {
+				files[path], _ = os.ReadFile(path)
+			}
+			return nil
+		})
+		return files
+	}
+	before := snapshot()
+	ctx, client := mcpRegistryClient(t, registry, func() {
+		if after := snapshot(); len(after) != len(before) {
+			t.Errorf("MCP changed store files: %d -> %d", len(before), len(after))
+		} else {
+			for path, data := range before {
+				if !bytes.Equal(data, after[path]) {
+					t.Errorf("MCP modified %s", path)
+				}
+			}
+		}
+	})
+	for _, c := range []struct {
+		format, selector, id string
+	}{{"chat", "plain-chat", "plain-chat"}, {"concord", "11111111-1111-4111-8111-111111111111", "11111111-1111-4111-8111-111111111111"}, {"concord", "Concord chat", "11111111-1111-4111-8111-111111111111"}} {
+		result := mcpCall(t, ctx, client, "show_session", map[string]any{"format": c.format, "selector": c.selector})
+		if result.IsError {
+			t.Fatalf("%s show failed: %+v", c.format, result)
+		}
+		transcript := mcpEncoded(t, result)["structuredContent"].(map[string]any)["transcript"].(map[string]any)
+		if transcript["schema_version"] != moirai.ChatSchemaVersion {
+			t.Fatalf("%s lost chat schema: %+v", c.format, transcript)
+		}
+		if transcript["meta"].(map[string]any)["id"] != c.id {
+			t.Fatalf("%s selected the wrong session: %+v", c.format, transcript["meta"])
+		}
+		messages := transcript["messages"].([]any)
+		if len(messages) != 3 || messages[0].(map[string]any)["role"] != string(moirai.RoleSystem) {
+			t.Fatalf("%s dropped or reordered the system message: %+v", c.format, messages)
+		}
+		text := result.Content[0].(*mcp.TextContent).Text
+		if !strings.Contains(text, "System [1]: Be concise.") || !strings.Contains(text, "Assistant [3]: Hi") {
+			t.Fatalf("%s readable text omits the system message: %s", c.format, text)
+		}
+		listed := mcpEncoded(t, mcpCall(t, ctx, client, "list_sessions", map[string]any{"format": c.format}))["structuredContent"].(map[string]any)["sessions"].([]any)
+		if len(listed) != 1 || listed[0].(map[string]any)["id"] != c.id {
+			t.Fatalf("%s list did not surface the session: %+v", c.format, listed)
+		}
+	}
+	hits := mcpEncoded(t, mcpCall(t, ctx, client, "search_sessions", map[string]any{"query": "concise"}))["structuredContent"].(map[string]any)["hits"].([]any)
+	if len(hits) != 2 {
+		t.Fatalf("search missed system messages across chat and Concord: %+v", hits)
 	}
 }
 
