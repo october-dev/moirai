@@ -72,6 +72,14 @@ func TestTextBoundAndSearch(t *testing.T) {
 	if len(text) > 90 || !strings.HasPrefix(text, "[earlier context omitted]") {
 		t.Fatalf("text (%d) = %q", len(text), text)
 	}
+	chat := &Transcript{SchemaVersion: ChatSchemaVersion, Messages: []Message{
+		{Role: RoleSystem, Content: []Block{{Type: BlockText, Text: "Be concise."}}},
+		{Role: RoleUser, Content: []Block{{Type: BlockText, Text: "Hello"}}},
+		{Role: RoleAssistant, Content: []Block{{Type: BlockText, Text: "Hi"}}},
+	}}
+	if got := ToText(chat, TextOptions{}); got != "System [1]: Be concise.\n\nUser [2]: Hello\n\nAssistant [3]: Hi" {
+		t.Fatalf("chat text = %q", got)
+	}
 	hits := Search(fixtureTranscript(), "parser repaired", 10)
 	if len(hits) != 1 || hits[0].MessageIndex != 4 {
 		t.Fatalf("hits = %#v", hits)

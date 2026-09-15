@@ -19,6 +19,7 @@ import (
 const version = "0.2.0"
 
 type app struct {
+	in        io.ReadCloser
 	out       io.Writer
 	err       io.Writer
 	newStores func() (*moirai.StoreRegistry, error)
@@ -26,7 +27,7 @@ type app struct {
 }
 
 func main() {
-	a := app{out: os.Stdout, err: os.Stderr}
+	a := app{in: os.Stdin, out: os.Stdout, err: os.Stderr}
 	if err := a.run(context.Background(), os.Args[1:]); err != nil {
 		fmt.Fprintln(a.err, "moirai:", moirai.ScrubTerminal(err.Error()))
 		os.Exit(1)
@@ -51,6 +52,8 @@ func (a app) run(ctx context.Context, args []string) error {
 		return a.formats(args[1:])
 	case "doctor":
 		return a.doctor(args[1:])
+	case "mcp":
+		return a.mcp(ctx, args[1:])
 	case "login":
 		return a.cloudLogin(ctx, args[1:])
 	case "logout":
@@ -107,6 +110,7 @@ func (a app) usage() {
 Usage:
   moirai completion <bash|zsh|fish>
   moirai doctor [--json]
+  moirai mcp
   moirai login [--server https://moirai.to]
   moirai logout
   moirai whoami
@@ -875,11 +879,15 @@ func (a app) printField(label, value string) {
 }
 
 func loadStored(ctx context.Context, selector string, format moirai.Format, limits moirai.Limits) (*moirai.ParseResult, error) {
-	parsedSelector, err := moirai.ParseSelector(selector)
+	registry, err := stores()
 	if err != nil {
 		return nil, err
 	}
-	registry, err := stores()
+	return loadStoredFrom(ctx, registry, selector, format, limits)
+}
+
+func loadStoredFrom(ctx context.Context, registry *moirai.StoreRegistry, selector string, format moirai.Format, limits moirai.Limits) (*moirai.ParseResult, error) {
+	parsedSelector, err := moirai.ParseSelector(selector)
 	if err != nil {
 		return nil, err
 	}

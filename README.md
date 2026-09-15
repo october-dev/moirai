@@ -252,6 +252,23 @@ without a range report `range: null`. Human output shows the resolved range,
 for example `Range: messages 3-6`, or `Range: all N messages` when no range is
 selected.
 
+## Read sessions from an MCP client
+
+`moirai mcp` exposes `formats`, `list_sessions`, `show_session`, and
+`search_sessions` as read-only MCP tools over stdio. Configure your client to
+start it with:
+
+```json
+{"command":"moirai","args":["mcp"]}
+```
+
+It reads the same local stores as the CLI and performs no saves, deletes,
+launches, or network requests. Read-only access does not redact histories or
+restrict them to the current project. The `thinking` and `tools` options affect
+text rendering only; structured transcripts retain the selected content.
+
+See [MCP setup, tools, limits, and privacy](docs/MCP.md) before connecting a client.
+
 ## Troubleshooting
 
 `moirai doctor` reports, for every supported harness, whether its executable is

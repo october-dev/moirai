@@ -9,7 +9,9 @@ by `schema_version`.
 - Add first-class plain chats (canonical schema 1.1), generic chat JSON and
   Concord adapters, lossless chat archives, safe local discovery/continuation,
   explicit rich-session degradation, and TypeScript canonical chat support.
-
+- Add `moirai mcp`, a read-only stdio MCP server for formats, session listing,
+  selected transcripts, and search, with bounded tool results, cooperative
+  deadlines, and documented privacy and transport limits.
 - Add `--cwd`, `--since`, `--until`, and `--limit` filters to `moirai list`.
 - Raise the source-build Go requirement to 1.26.8.
 
