@@ -136,6 +136,9 @@ func stripCursorPrompt(text string) string {
 }
 
 func (CursorCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, CursorCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
@@ -381,6 +384,9 @@ func sanitizeID(value string) string {
 }
 
 func (CursorDesktopCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, CursorDesktopCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}

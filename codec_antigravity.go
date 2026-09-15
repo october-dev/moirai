@@ -376,6 +376,9 @@ func agStep(index, stepType, status int, metadata, body []byte, bodyField uint32
 }
 
 func (AntigravityCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, AntigravityCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}

@@ -4,10 +4,15 @@ import "encoding/json"
 
 const SchemaVersion = "1.0"
 
+// ChatSchemaVersion adds ordered system messages; 1.0 remains readable and unchanged.
+const ChatSchemaVersion = "1.1"
+
 type Format string
 
 const (
 	FormatSimple        Format = "simple"
+	FormatChat          Format = "chat"
+	FormatConcord       Format = "concord"
 	FormatClaudeCode    Format = "claude_code"
 	FormatCodex         Format = "codex"
 	FormatPi            Format = "pi"
@@ -29,7 +34,7 @@ var Formats = []Format{
 	FormatSimple, FormatClaudeCode, FormatCodex, FormatPi, FormatAmp,
 	FormatOpenCode, FormatCursor, FormatCursorDesktop, FormatGrok,
 	FormatHermes, FormatAntigravity, FormatCampfire, FormatCowork,
-	FormatFX, FormatClaudeChat, FormatChatGPT,
+	FormatFX, FormatClaudeChat, FormatChatGPT, FormatChat, FormatConcord,
 }
 
 type Role string
@@ -37,6 +42,7 @@ type Role string
 const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
+	RoleSystem    Role = "system"
 )
 
 type BlockType string

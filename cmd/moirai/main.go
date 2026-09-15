@@ -542,6 +542,11 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	if target == "" {
 		return errors.New("target format is required")
 	}
+	// Plain chat destinations save a new local conversation; there is no
+	// application process to launch and no implicit remote account.
+	if moirai.Format(target) == moirai.FormatChat {
+		*noLaunch = true
+	}
 	if continuing && !*noLaunch {
 		codec, err := moirai.DefaultRegistry.Codec(moirai.Format(target))
 		if err != nil {
@@ -592,7 +597,7 @@ func (a app) importSession(ctx context.Context, args []string, continuing bool) 
 	provenance.SourceFormat = sourceFormat
 	provenance.SourceSessionID = transcript.Meta.ID
 	provenance.ImportedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	if info, statErr := os.Stat(copy.Meta.CWD); copy.Meta.CWD == "" || statErr != nil || !info.IsDir() {
+	if info, statErr := os.Stat(copy.Meta.CWD); moirai.Format(target) != moirai.FormatChat && moirai.Format(target) != moirai.FormatConcord && copy.SchemaVersion != moirai.ChatSchemaVersion && (copy.Meta.CWD == "" || statErr != nil || !info.IsDir()) {
 		original := copy.Meta.CWD
 		cwd, cwdErr := os.Getwd()
 		if cwdErr != nil {

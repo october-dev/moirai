@@ -89,6 +89,16 @@ export class ClaudeCodeCodec implements Codec {
 
   render(transcript: Transcript, limits: Limits = { ...DEFAULT_LIMITS }): RenderResult {
     validate(transcript, limits);
+    if (transcript.messages.some(m => m.role === "system")) {
+      const warnings: Warning[] = [];
+      const messages = transcript.messages.map((m, i): Message => {
+        if (m.role !== "system") return m;
+        warnings.push({ path: `messages[${i}].role`, code: "system_role_flattened", message: "System message preserved as labelled user context; destination instruction semantics are not equivalent" });
+        return { ...m, role: "user", content: [{ type: "text", text: "[System message from source chat]" }, ...m.content] };
+      });
+      const result = this.render({ ...transcript, messages }, limits);
+      return { data: result.data, warnings: [...warnings, ...result.warnings] };
+    }
     const sessionID = transcript.meta.id;
     const lines: string[] = [];
     let parent = "";
@@ -103,6 +113,10 @@ export class ClaudeCodeCodec implements Codec {
         let stopReason = message.stop_reason ?? "";
         if (!stopReason && message.content.some((block) => block.type === "tool_use")) stopReason = "tool_use";
         payload.stop_reason = firstNonEmpty(stopReason, "end_turn");
+        if (transcript.schema_version === "1.1") {
+          payload.model = firstNonEmpty(message.model, transcript.meta.model);
+          payload.stop_reason = stopReason;
+        }
         if (message.usage) payload.usage = message.usage;
       }
       lines.push(JSON.stringify({

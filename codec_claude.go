@@ -81,6 +81,9 @@ func (ClaudeCodeCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, erro
 }
 
 func (ClaudeCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, ClaudeCodeCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
@@ -100,6 +103,10 @@ func (ClaudeCodeCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult,
 				stopReason = "tool_use"
 			}
 			payload["stop_reason"] = firstNonEmpty(stopReason, "end_turn")
+			if t.SchemaVersion == ChatSchemaVersion {
+				payload["model"] = firstNonEmpty(message.Model, t.Meta.Model)
+				payload["stop_reason"] = stopReason
+			}
 			if message.Usage != nil {
 				payload["usage"] = message.Usage
 			}

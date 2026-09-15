@@ -77,6 +77,9 @@ func normalizeAmpContent(content []any) []any {
 }
 
 func (AmpCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, AmpCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}

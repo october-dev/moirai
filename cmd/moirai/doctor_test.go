@@ -605,7 +605,7 @@ func TestFormatsHumanOutputUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Captured from main before extracting capabilityNames.
-	const want = `simple             Simple                 read,write
+	want := `simple             Simple                 read,write
 claude_code        Claude Code            read,write,discover,continue
 codex              Codex                  read,write,discover,continue
 pi                 pi                     read,write,discover,continue
@@ -621,7 +621,13 @@ cowork             Claude Cowork          read,write,discover
 fx                 fx                     read,write,discover,continue
 claude_chat        Claude Chat            read,source-only
 chatgpt            ChatGPT                read,source-only
+chat               Plain chat             read,write,discover
 `
+	if runtime.GOOS == "darwin" {
+		want += "concord            Concord                read,write,discover,continue\n"
+	} else {
+		want += "concord            Concord                read,write,discover\n"
+	}
 	if stdout.String() != want {
 		t.Fatalf("formats output changed:\ngot  %q\nwant %q", stdout.String(), want)
 	}

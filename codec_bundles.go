@@ -82,6 +82,9 @@ func (GrokCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 }
 
 func (GrokCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, GrokCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
@@ -105,13 +108,13 @@ func (GrokCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error
 					if block.IsError {
 						status = "failed"
 					}
-					updates = append(updates, grokUpdate(id, stamp, "tool_call_update", map[string]any{"toolCallId": block.ToolUseID, "status": status, "content": fmt.Sprint(content)}))
+					updates = append(updates, grokUpdate(t, id, stamp, "tool_call_update", map[string]any{"toolCallId": block.ToolUseID, "status": status, "content": fmt.Sprint(content)}))
 				}
 			}
 			if len(texts) > 0 {
 				text := strings.Join(texts, "\n\n")
 				chat = append(chat, map[string]any{"type": "user", "content": []any{map[string]any{"type": "text", "text": text}}})
-				updates = append(updates, grokUpdate(id, stamp, "user_message_chunk", map[string]any{"content": map[string]any{"type": "text", "text": text}, "_meta": map[string]any{"promptIndex": prompt}}))
+				updates = append(updates, grokUpdate(t, id, stamp, "user_message_chunk", map[string]any{"content": map[string]any{"type": "text", "text": text}, "_meta": map[string]any{"promptIndex": prompt}}))
 				prompt++
 			}
 			continue
@@ -124,34 +127,42 @@ func (GrokCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error
 				texts = append(texts, block.Text)
 			case BlockThinking:
 				chat = append(chat, map[string]any{"type": "reasoning", "id": stableID("rs_", id, fmt.Sprint(mi), fmt.Sprint(bi)), "summary": []any{map[string]any{"type": "summary_text", "text": block.Text}}, "encrypted_content": block.Encrypted, "status": "completed"})
-				updates = append(updates, grokUpdate(id, stamp, "agent_thought_chunk", map[string]any{"content": map[string]any{"type": "text", "text": block.Text}}))
+				updates = append(updates, grokUpdate(t, id, stamp, "agent_thought_chunk", map[string]any{"content": map[string]any{"type": "text", "text": block.Text}}))
 			case BlockToolUse:
 				calls = append(calls, map[string]any{"id": block.ID, "name": block.Name, "arguments": string(block.Input)})
 				var input any
 				_ = json.Unmarshal(block.Input, &input)
-				updates = append(updates, grokUpdate(id, stamp, "tool_call", map[string]any{"toolCallId": block.ID, "title": block.Name, "kind": "other", "rawInput": input}))
+				updates = append(updates, grokUpdate(t, id, stamp, "tool_call", map[string]any{"toolCallId": block.ID, "title": block.Name, "kind": "other", "rawInput": input}))
 			}
 		}
 		if len(texts) > 0 || len(calls) > 0 {
 			text := strings.Join(texts, "\n\n")
 			chat = append(chat, map[string]any{"type": "assistant", "content": text, "tool_calls": calls, "model_id": firstNonEmpty(message.Model, t.Meta.Model)})
 			if text != "" {
-				updates = append(updates, grokUpdate(id, stamp, "agent_message_chunk", map[string]any{"content": map[string]any{"type": "text", "text": text}}))
+				updates = append(updates, grokUpdate(t, id, stamp, "agent_message_chunk", map[string]any{"content": map[string]any{"type": "text", "text": text}}))
 			}
 		}
-		updates = append(updates, grokUpdate(id, stamp, "turn_completed", map[string]any{"stop_reason": firstNonEmpty(message.StopReason, "end_turn")}))
+		stopReason := firstNonEmpty(message.StopReason, "end_turn")
+		if t.SchemaVersion == ChatSchemaVersion {
+			stopReason = message.StopReason
+		}
+		updates = append(updates, grokUpdate(t, id, stamp, "turn_completed", map[string]any{"stop_reason": stopReason}))
 	}
 	body := map[string]any{"chat_history": chat, "updates": updates, "summary": map[string]any{"info": map[string]any{"id": id, "cwd": t.Meta.CWD}, "session_summary": t.Meta.Title, "generated_title": t.Meta.Title, "created_at": t.Meta.Timestamp, "updated_at": firstNonEmpty(t.Meta.UpdatedAt, t.Meta.Timestamp), "num_messages": len(updates), "num_chat_messages": len(chat), "current_model_id": t.Meta.Model, "head_branch": t.Meta.GitBranch, "chat_format_version": 1}}
 	result, err := encodeObject(body)
 	return finalizeRender(t, FormatGrok, result, err)
 }
 
-func grokUpdate(id, stamp, kind string, fields map[string]any) map[string]any {
+func grokUpdate(t *Transcript, id, stamp, kind string, fields map[string]any) map[string]any {
+	var seconds any = epochMillis(stamp) / 1000
+	if t.SchemaVersion == ChatSchemaVersion {
+		seconds = nativeSeconds(t, stamp)
+	}
 	update := map[string]any{"sessionUpdate": kind}
 	for key, value := range fields {
 		update[key] = value
 	}
-	return map[string]any{"timestamp": epochMillis(stamp) / 1000, "method": "session/update", "params": map[string]any{"sessionId": id, "update": update, "_meta": map[string]any{"agentTimestampMs": epochMillis(stamp)}}}
+	return map[string]any{"timestamp": seconds, "method": "session/update", "params": map[string]any{"sessionId": id, "update": update, "_meta": map[string]any{"agentTimestampMs": nativeMillis(t, stamp)}}}
 }
 
 type FXCodec struct{}
@@ -249,24 +260,32 @@ func fxAssistantBlocks(textValue any, calls []any, known map[string]bool, seed i
 }
 
 func (FXCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, FXCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
 	id := firstNonEmpty(opts.ID, t.Meta.ID)
 	generation := stableID("", id, "generation")
 	var events []any
-	events = append(events, map[string]any{"schema_version": 1, "log_generation": generation, "seq": 1, "event_id": stableID("", id, "event:1"), "timestamp_ms": epochMillis(t.Meta.Timestamp), "kind": "session_started", "payload": map[string]any{"id": id, "created_at_ms": epochMillis(t.Meta.Timestamp), "workspace_root": t.Meta.CWD}})
+	events = append(events, map[string]any{"schema_version": 1, "log_generation": generation, "seq": 1, "event_id": stableID("", id, "event:1"), "timestamp_ms": nativeMillis(t, t.Meta.Timestamp), "kind": "session_started", "payload": map[string]any{"id": id, "created_at_ms": nativeMillis(t, t.Meta.Timestamp), "workspace_root": t.Meta.CWD}})
 	turns := canonicalTurns(t.Messages)
 	for i, turn := range turns {
 		stamp := firstNonEmpty(turn.stamp, t.Meta.Timestamp)
-		events = append(events, map[string]any{"schema_version": 1, "log_generation": generation, "seq": i + 2, "event_id": stableID("", id, fmt.Sprintf("event:%d", i+2)), "timestamp_ms": epochMillis(stamp), "kind": "history_turn_committed", "payload": map[string]any{"conversation_language": "und", "total_input_tokens": 0, "total_output_tokens": 0, "turn": turn.value}})
+		events = append(events, map[string]any{"schema_version": 1, "log_generation": generation, "seq": i + 2, "event_id": stableID("", id, fmt.Sprintf("event:%d", i+2)), "timestamp_ms": nativeMillis(t, stamp), "kind": "history_turn_committed", "payload": map[string]any{"conversation_language": "und", "total_input_tokens": 0, "total_output_tokens": 0, "turn": turn.value}})
+		if t.SchemaVersion == ChatSchemaVersion {
+			payload := events[len(events)-1].(map[string]any)["payload"].(map[string]any)
+			delete(payload, "total_input_tokens")
+			delete(payload, "total_output_tokens")
+		}
 	}
 	last := t.Meta.Timestamp
 	if len(t.Messages) > 0 {
 		last = firstNonEmpty(t.Messages[len(t.Messages)-1].Timestamp, last)
 	}
 	authority := stableID("", id, "authority")
-	body := map[string]any{"events": events, "session": map[string]any{"schema_version": 3, "storage_format": "event_log_v1", "id": id, "authority_id": authority, "log_generation": generation, "created_at_ms": epochMillis(t.Meta.Timestamp), "updated_at_ms": epochMillis(last), "origin_workspace_root": t.Meta.CWD, "workspace_root": t.Meta.CWD, "history_len": len(turns), "preferences": map[string]any{"model": t.Meta.Model}}, "authority": map[string]any{"schema_version": 1, "session_id": id, "authority_id": authority, "storage_format": "event_log_v1", "source": "native_create"}, "commit": map[string]any{"schema_version": 1, "session_id": id, "log_generation": generation, "through_seq": len(events)}, "display": map[string]any{"schema_version": 1, "title": t.Meta.Title, "preview": t.Meta.Title, "origin_workspace_root": t.Meta.CWD}}
+	body := map[string]any{"events": events, "session": map[string]any{"schema_version": 3, "storage_format": "event_log_v1", "id": id, "authority_id": authority, "log_generation": generation, "created_at_ms": nativeMillis(t, t.Meta.Timestamp), "updated_at_ms": nativeMillis(t, last), "origin_workspace_root": t.Meta.CWD, "workspace_root": t.Meta.CWD, "history_len": len(turns), "preferences": map[string]any{"model": t.Meta.Model}}, "authority": map[string]any{"schema_version": 1, "session_id": id, "authority_id": authority, "storage_format": "event_log_v1", "source": "native_create"}, "commit": map[string]any{"schema_version": 1, "session_id": id, "log_generation": generation, "through_seq": len(events)}, "display": map[string]any{"schema_version": 1, "title": t.Meta.Title, "preview": t.Meta.Title, "origin_workspace_root": t.Meta.CWD}}
 	result, err := encodeObject(body)
 	return finalizeRender(t, FormatFX, result, err)
 }

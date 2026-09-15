@@ -145,6 +145,9 @@ func renderLossWarnings(t *Transcript, format Format) []Warning {
 		warnings = append(warnings, Warning{Code: "extension_omitted", Message: fmt.Sprintf("%s cannot represent canonical extension data; extension omitted", format)})
 	}
 	for messageIndex, message := range t.Messages {
+		if t.SchemaVersion == ChatSchemaVersion && len(message.Content) == 0 {
+			warnings = append(warnings, Warning{Path: fmt.Sprintf("messages[%d]", messageIndex), Code: "empty_message_not_portable", Message: "Native harnesses may omit empty messages; use a chat destination or canonical archive to preserve them"})
+		}
 		if len(message.Extra) > 0 {
 			warnings = append(warnings, Warning{Path: fmt.Sprintf("messages[%d].extra", messageIndex), Code: "extension_omitted", Message: fmt.Sprintf("%s cannot represent message extension data; extension omitted", format)})
 		}

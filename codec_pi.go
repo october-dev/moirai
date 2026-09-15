@@ -87,6 +87,9 @@ func (c PiCodec) Parse(data []byte, opts ParseOptions) (*ParseResult, error) {
 }
 
 func (c PiCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, c); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
@@ -108,7 +111,7 @@ func (c PiCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error
 			}
 			var content any
 			_ = json.Unmarshal(block.Content, &content)
-			payload := map[string]any{"role": "toolResult", "toolCallId": block.ToolUseID, "content": content, "isError": block.IsError, "timestamp": epochMillis(stamp)}
+			payload := map[string]any{"role": "toolResult", "toolCallId": block.ToolUseID, "content": content, "isError": block.IsError, "timestamp": nativeMillis(t, stamp)}
 			record := map[string]any{"type": "message", "id": id, "parentId": parent, "timestamp": stamp, "message": payload}
 			records = append(records, record)
 			parent = id
@@ -117,14 +120,23 @@ func (c PiCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error
 			continue
 		}
 		content := renderPiContent(regular)
-		payload := map[string]any{"role": message.Role, "content": content, "timestamp": epochMillis(stamp)}
+		payload := map[string]any{"role": message.Role, "content": content, "timestamp": nativeMillis(t, stamp)}
 		if message.Role == RoleAssistant {
 			payload["model"] = firstNonEmpty(message.Model, t.Meta.Model, "unknown")
 			payload["provider"] = "unknown"
 			payload["api"] = "unknown"
 			payload["stopReason"] = firstNonEmpty(message.StopReason, "stop")
+			if t.SchemaVersion == ChatSchemaVersion {
+				payload["model"] = firstNonEmpty(message.Model, t.Meta.Model)
+				payload["provider"] = t.Meta.ModelProvider
+				payload["api"] = ""
+				payload["stopReason"] = message.StopReason
+			}
 			if message.Usage != nil {
 				payload["usage"] = map[string]any{"input": message.Usage.InputTokens, "output": message.Usage.OutputTokens, "cacheRead": message.Usage.CacheReadInputTokens, "cacheWrite": message.Usage.CacheCreationInputTokens, "cost": map[string]any{"total": 0}}
+				if t.SchemaVersion == ChatSchemaVersion {
+					delete(payload["usage"].(map[string]any), "cost")
+				}
 			}
 		}
 		record := map[string]any{"type": "message", "id": baseID, "parentId": parent, "timestamp": stamp, "message": payload}

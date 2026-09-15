@@ -24,14 +24,30 @@ It is a local-first Go library and CLI with a typed TypeScript SDK. The
 open-source tools require no Moirai account, daemon, hosted service, or
 credential collector.
 
+## Ordinary chats, too
+
+Moirai also handles plain `system` / `user` / `assistant` conversations. Import
+OpenAI-style chat JSON or discover Concord's saved chats, preserve message order
+and model information, and create portable `.moirai` archives—all locally.
+
+```sh
+moirai list --format concord
+moirai convert conversation.json --from chat --to simple --out canonical.json
+moirai archive create conversation.json --from chat --out conversation.moirai
+moirai continue conversation.moirai --with chat
+```
+
+The `chat` destination saves local JSON without starting a process. The Concord
+destination stages a new import file and opens the app's confirmation dialog on
+macOS; it never rewrites the app's live database. See [chat formats and setup](docs/CHAT.md)
+for the required Concord build, exact round-trip contract, and degradation warnings.
+
 ## Free and hosted versions
 
-Moirai is building a collaboration layer for agent work—something like GitHub
-for agent sessions. Local sessions remain ordinary files under your control,
-while an optional hosted service will make those sessions shareable and
-collaborative across people, machines, and agent harnesses. The model is
-similar to Git: work locally for free, publish only what you choose, and use a
-remote when you want distribution and collaboration.
+Use Moirai locally to switch harnesses, or use the optional Cloud service to
+keep session files online. Local conversion never requires an account or upload.
+The website is [moirai.to](https://moirai.to); Cloud is currently a restricted
+pilot, not open registration or a paid subscription.
 
 ### Open source: free and local
 
@@ -49,18 +65,39 @@ This local version is the foundation of Moirai, not a limited client for the
 hosted product. It remains useful on its own and keeps session data under the
 user's control.
 
-### Moirai Cloud client
+### Private Cloud backups (restricted pilot)
+
+The pilot backs up original Codex and Claude Code files, separately from
+converted `.moirai` archives. Uploads are explicit, encrypted in storage, and
+accessible only to their owner through the service. Original files are not
+redacted and can contain secrets; storage encryption is not end-to-end encryption.
+
+- Chunked uploads resume interrupted transfers.
+- Each successful upload is downloaded and SHA-256 checked against the original.
+- Restores create a new file without overwriting an existing one.
+- Local sessions are never automatically deleted.
+
+Approved pilot accounts can [open their backups](https://moirai-cloud.onrender.com/backups).
+The dashboard lists files and backup status; it is not yet a conversation reader.
+The pilot uses a separate `moirai-sync` companion maintained with the private
+backend, not a command included in the public CLI release. It backs up files
+under selected session directories, not project repositories or a whole computer.
+Keep local originals until you have independently checked a restored copy.
+
+### Cloud sharing client
 
 This public repository contains the core library, CLI, TypeScript SDK, and local
 sharing preparation. The hosted backend, landing page, dashboard, and deployment
 configuration are maintained separately in a private repository. The CLI can
-connect to a configured Moirai service; these commands do not imply that
-`moirai.to` is live. Local functionality requires no hosted account.
+connect to a configured Moirai service. The current pilot runs at
+`https://moirai-cloud.onrender.com`; `moirai.to` serves the public website.
+Only approved accounts can sign in to the pilot. Local functionality requires
+no hosted account. Shared checkpoints below are separate from original-file backups.
 
 Prepare and inspect an archive locally before publishing:
 
 ```bash
-moirai login --server https://moirai.to
+moirai login --server https://moirai-cloud.onrender.com
 moirai publish 'SESSION_ID#12-38' --from claude_code --preview-out reviewed.moirai
 moirai publish reviewed.moirai --visibility private --yes
 moirai invite PUBLICATION_ID --login teammate

@@ -156,11 +156,18 @@ func parseCodexEvent(payload map[string]any, stamp, model string) (Message, bool
 }
 
 func (CodexCodec) Render(t *Transcript, opts RenderOptions) (*RenderResult, error) {
+	if r, err, handled := renderChatSystem(t, opts, CodexCodec{}); handled {
+		return r, err
+	}
 	if err := Validate(t, opts.Limits); err != nil {
 		return nil, err
 	}
 	sessionID := firstNonEmpty(opts.ID, t.Meta.ID)
-	header := map[string]any{"timestamp": t.Meta.Timestamp, "type": "session_meta", "payload": map[string]any{"id": sessionID, "timestamp": t.Meta.Timestamp, "cwd": t.Meta.CWD, "originator": "moirai", "cli_version": t.Meta.CLIVersion, "source": "cli", "model_provider": firstNonEmpty(t.Meta.ModelProvider, "openai"), "model": t.Meta.Model, "base_instructions": nil, "git": map[string]any{"branch": t.Meta.GitBranch}}}
+	provider := firstNonEmpty(t.Meta.ModelProvider, "openai")
+	if t.SchemaVersion == ChatSchemaVersion {
+		provider = t.Meta.ModelProvider
+	}
+	header := map[string]any{"timestamp": t.Meta.Timestamp, "type": "session_meta", "payload": map[string]any{"id": sessionID, "timestamp": t.Meta.Timestamp, "cwd": t.Meta.CWD, "originator": "moirai", "cli_version": t.Meta.CLIVersion, "source": "cli", "model_provider": provider, "model": t.Meta.Model, "base_instructions": nil, "git": map[string]any{"branch": t.Meta.GitBranch}}}
 	records := []any{header}
 	for _, message := range t.Messages {
 		stamp := firstNonEmpty(message.Timestamp, t.Meta.Timestamp)

@@ -1,4 +1,4 @@
-# Moirai session format 1.0
+# Moirai session format 1.0 / 1.1
 
 Moirai's canonical transcript is the stable boundary between native harness
 adapters. JSON is UTF-8. Unknown object fields may be retained by an
@@ -6,6 +6,42 @@ implementation, but readers must reject an unsupported `schema_version`.
 
 The machine-readable definition is
 [`schema/moirai-session.schema.json`](../schema/moirai-session.schema.json).
+
+## Ordinary chats are complete sessions
+
+Schema **1.1** adds `system` alongside `user` and `assistant`. Schema 1.0 is still
+accepted, with its existing user/assistant role set and unchanged encoding. Existing
+agent codecs continue emitting 1.0; plain-chat codecs emit 1.1. The archive envelope
+remains version 1: its payload declares the transcript version. Old readers that
+only understand 1.0 must reject a 1.1 transcript, not quietly discard system messages.
+
+No `session_kind` flag is needed. A chat and an agent session use the same message
+model, and a conversation may acquire tools later. Workspace, branch, CLI version,
+provenance/ancestry, message IDs, timestamps, usage, and every non-text block are
+optional. A system message retains its position; it is not moved into metadata.
+
+```json
+{
+  "schema_version": "1.1",
+  "meta": { "id": "local-chat-id", "model": "example/model" },
+  "messages": [
+    { "role": "system", "content": [{ "type": "text", "text": "Be concise." }] },
+    { "role": "user", "content": [{ "type": "text", "text": "Hello" }] },
+    { "role": "assistant", "content": [] }
+  ]
+}
+```
+
+An empty content array preserves an empty message; it is not removed. Missing
+timestamps stay missing. `meta.id` is required for Moirai identity; when a generic
+chat has no ID the adapter derives a stable local ID and remembers that the source
+omitted it. Rendering that chat back does not add an ID to the source document.
+
+See [plain chat and Concord](CHAT.md) for source fields, discovery, exact round-trip
+boundaries, and destination degradation. “Lossless” means equal JSON values within
+the supported source contract, including message order and text—not original
+whitespace, indentation, or object-key order. Canonical edits are authoritative;
+no hidden copy of the original conversation overrides them.
 
 ## Document
 
