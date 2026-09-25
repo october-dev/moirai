@@ -34,6 +34,7 @@ var completionCommands = []commandSpec{
 	{name: "help"}, {name: "version"},
 	{name: "formats", flags: []flagSpec{{"json", boolValue}}},
 	{name: "doctor", flags: []flagSpec{{"json", boolValue}}},
+	{name: "mcp"},
 	{name: "login", flags: []flagSpec{{"server", opaqueValue}}},
 	{name: "logout"}, {name: "whoami"},
 	{name: "team", positional: "team-subcommand", flags: []flagSpec{{"user", opaqueValue}, {"role", opaqueValue}}},

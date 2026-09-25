@@ -66,8 +66,11 @@ func ToText(t *Transcript, opts TextOptions) string {
 			continue
 		}
 		label := "User"
-		if message.Role == RoleAssistant {
+		switch message.Role {
+		case RoleAssistant:
 			label = "Assistant"
+		case RoleSystem:
+			label = "System"
 		}
 		sections = append(sections, fmt.Sprintf("%s [%d]: %s", label, i+1, strings.Join(parts, "\n")))
 	}
