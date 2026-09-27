@@ -17,7 +17,7 @@
   "additionalProperties": false,
   "allOf": [{
     "if": { "properties": { "schema_version": { "const": "1.0" } } },
-    "then": { "properties": { "messages": { "items": { "properties": { "role": { "enum": ["user", "assistant"] } } } } } }
+    "then": { "properties": { "messages": { "type": "array", "items": { "type": "object", "properties": { "role": { "enum": ["user", "assistant"] } } } } } }
   }],
   "$defs": {
     "rfc3339": { "type": "string", "format": "date-time" },
