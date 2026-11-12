@@ -140,7 +140,7 @@ v0.2.0 includes `SHA256SUMS` and provenance. See [installation instructions](doc
 for verification and extraction. The npm package is the TypeScript SDK, not the
 native CLI.
 
-Go 1.26.8 or newer:
+Go 1.26.11 or newer:
 
 ```bash
 go install github.com/october-dev/moirai/cmd/moirai@latest
