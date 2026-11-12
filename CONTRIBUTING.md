@@ -26,7 +26,7 @@ Thank you for helping make agent sessions portable across tools.
 
 ## Development
 
-The reference implementation requires Go 1.26.8. The TypeScript SDK requires
+The reference implementation requires Go 1.26.11. The TypeScript SDK requires
 Node.js 20 or newer.
 
 ```bash

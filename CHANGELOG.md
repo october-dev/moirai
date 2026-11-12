@@ -13,7 +13,7 @@ by `schema_version`.
   selected transcripts, and search, with bounded tool results, cooperative
   deadlines, and documented privacy and transport limits.
 - Add `--cwd`, `--since`, `--until`, and `--limit` filters to `moirai list`.
-- Raise the source-build Go requirement to 1.26.8.
+- Raise the source-build Go requirement to 1.26.11.
 
 - Keep the hosted backend, website, and deployment tooling in a separate private
   repository; retain the open-source core, CLI, SDK, and local sharing preparation.

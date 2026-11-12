@@ -77,12 +77,12 @@ cat dist/verify/released/BUILD.txt
 ```
 
 The status command should print nothing. Use the exact Go toolchain recorded in
-the released `BUILD.txt`; replace `go1.26.8` below if it differs. The `go 1.26.8`
+the released `BUILD.txt`; replace `go1.26.11` below if it differs. The `go 1.26.11`
 line in `go.mod` sets a minimum, so pin `GOTOOLCHAIN` explicitly and control the
 build environment:
 
 ```sh
-GOTOOLCHAIN=go1.26.8 GOENV=off GOWORK=off GOFLAGS= GOEXPERIMENT= GOAMD64=v1 \
+GOTOOLCHAIN=go1.26.11 GOENV=off GOWORK=off GOFLAGS= GOEXPERIMENT= GOAMD64=v1 \
   TARGET_OS=linux TARGET_ARCH=amd64 node .github/scripts/package.mjs
 tar -xzf dist/releases/moirai_0.2.0_linux_amd64.tar.gz -C dist/verify/local
 sha256sum dist/verify/local/moirai dist/verify/released/moirai
