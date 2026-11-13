@@ -126,6 +126,9 @@ moirai publish reviewed.moirai --visibility private --yes
 moirai invite PUBLICATION_ID --login teammate
 ```
 
+`moirai logout` signs out of the configured service and clears the locally
+stored token; it takes no arguments.
+
 The preparation step strips workspace metadata and persisted thinking, omits
 local media references, and redacts recognizable token patterns. Inspect the
 entire prepared archive: tool output, metadata, and inline media can still contain
@@ -146,6 +149,9 @@ Prepare the destination repository separately. Continuing creates a fresh native
 session and surfaces compatibility warnings. `moirai unpublish ID --yes` revokes
 future service access; `moirai cloud-delete ID --yes` deletes the live archive.
 Neither operation can recall downloaded copies or independent forks.
+`moirai fork SHARE_URL_OR_ID --yes` creates your own private hosted copy of a
+shared checkpoint with parent ancestry, so you can keep working from it
+independently.
 
 `moirai team create NAME` creates a shared workspace. Use `moirai whoami` to get
 your stable account ID, `team invite TEAM --user ACCOUNT_ID --role writer` to add
