@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="312" viewBox="0 0 880 312" role="img" aria-label="moirai inspects a Claude Code session, previews moving it to Codex with a warning for an image Codex cannot represent, then continues it in Codex.">
+  <style>
+    .l0 { animation: s0 14s steps(1) infinite; }
+    @keyframes s0 { 0% { opacity: 0; } 0.00% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l1 { animation: s1 14s steps(1) infinite; }
+    @keyframes s1 { 0% { opacity: 0; } 7.14% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l2 { animation: s2 14s steps(1) infinite; }
+    @keyframes s2 { 0% { opacity: 0; } 14.29% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l3 { animation: s3 14s steps(1) infinite; }
+    @keyframes s3 { 0% { opacity: 0; } 21.43% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l4 { animation: s4 14s steps(1) infinite; }
+    @keyframes s4 { 0% { opacity: 0; } 28.57% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l5 { animation: s5 14s steps(1) infinite; }
+    @keyframes s5 { 0% { opacity: 0; } 35.71% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l6 { animation: s6 14s steps(1) infinite; }
+    @keyframes s6 { 0% { opacity: 0; } 42.86% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l7 { animation: s7 14s steps(1) infinite; }
+    @keyframes s7 { 0% { opacity: 0; } 50.00% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l8 { animation: s8 14s steps(1) infinite; }
+    @keyframes s8 { 0% { opacity: 0; } 57.14% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .l9 { animation: s9 14s steps(1) infinite; }
+    @keyframes s9 { 0% { opacity: 0; } 64.29% { opacity: 1; } 94% { opacity: 1; } 95%,100% { opacity: 0; } }
+    .caret { animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .l, .caret { animation: none; opacity: 1; } }
+  </style>
+  <rect width="880" height="312" rx="12" fill="#14110F"/>
+  <rect width="880" height="36" rx="12" fill="#221C18"/>
+  <rect y="24" width="880" height="12" fill="#221C18"/>
+  <circle cx="22" cy="18" r="6" fill="#FF5F57"/><circle cx="42" cy="18" r="6" fill="#FEBC2E"/><circle cx="62" cy="18" r="6" fill="#28C840"/>
+  <text x="440" y="23" text-anchor="middle" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#8B949E">moirai — Claude Code → Codex</text>
+  <text class="l l0" x="28" y="64" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#E6EDF3" font-weight="700" xml:space="preserve"><tspan fill="#E94F64" font-weight="700">$ </tspan>moirai inspect session.jsonl --from claude_code</text>
+  <text class="l l1" x="28" y="86" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#B1BAC4" xml:space="preserve">Format: claude_code</text>
+  <text class="l l2" x="28" y="108" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#B1BAC4" xml:space="preserve">Messages: 4</text>
+  <text class="l l3" x="28" y="130" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#E6EDF3" font-weight="700" xml:space="preserve"><tspan fill="#E94F64" font-weight="700">$ </tspan>moirai import session.jsonl --from claude_code --to codex --dry-run</text>
+  <text class="l l4" x="28" y="152" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#E3B341" xml:space="preserve">warning: messages[0].content[1]: codex cannot represent image content; block omitted</text>
+  <text class="l l5" x="28" y="174" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#F97316" font-weight="700" xml:space="preserve">Preview: claude_code → codex, 4 messages, 1166 bytes</text>
+  <text class="l l6" x="28" y="196" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#B1BAC4" xml:space="preserve">Destination: ~/.codex/sessions</text>
+  <text class="l l7" x="28" y="218" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#B1BAC4" xml:space="preserve">Range: all 4 messages</text>
+  <text class="l l8" x="28" y="240" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#E6EDF3" font-weight="700" xml:space="preserve"><tspan fill="#E94F64" font-weight="700">$ </tspan>moirai continue SESSION_ID --from claude_code --with codex</text>
+  <text class="l l9" x="28" y="262" font-family="Menlo, Consolas, 'Liberation Mono', monospace" font-size="14" fill="#6E7681" xml:space="preserve"># a fresh Codex session with provenance to its source; the original is untouched</text>
+  <rect class="caret" x="28" y="270" width="9" height="16" fill="#F97316"/>
+</svg>

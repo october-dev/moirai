@@ -1,18 +1,41 @@
 <div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/header/logo-dark.svg">
+    <img src="assets/header/logo-light.svg" alt="Moirai" width="620">
+  </picture>
+  <br>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/header/tagline-dark.svg">
+    <img src="assets/header/tagline-light.svg" alt="Move a session to another harness. Keep working." width="560">
+  </picture>
+</div>
 
-<img src="assets/moirai-wordmark-v7.svg" alt="Moirai terminal wordmark" width="760">
+---
 
-# Moirai
+<p>
+  <a href="https://moirai.to"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/button-site-dark.svg"><img src="assets/header/button-site-light.svg" alt="moirai.to" height="40" align="top"></picture></a>
+  <a href="#install"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/button-install-dark.svg"><img src="assets/header/button-install-light.svg" alt="Install" height="40" align="top"></picture></a>
+  <a href="#continue-a-session"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/button-continue-dark.svg"><img src="assets/header/button-continue-light.svg" alt="Continue a session" height="40" align="top"></picture></a>
+  <a href="#supported-formats"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/button-formats-dark.svg"><img src="assets/header/button-formats-light.svg" alt="Formats" height="40" align="top"></picture></a>
+  <a href="#contributing"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/button-contribute-dark.svg"><img src="assets/header/button-contribute-light.svg" alt="Contribute" height="40" align="top"></picture></a>
+  <a href="#free-and-hosted-versions"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/header/callout-dark.svg"><img src="assets/header/callout-light.svg" alt="Local-first. No account, daemon or hosted service." height="40" align="top"></picture></a>
+</p>
 
-**Move an AI-agent session to another harness and keep working.**
+---
+
+<div align="center">
 
 [moirai.to](https://moirai.to) · An [October open-source project](https://october.dev/open-source).
 
 [![CI](https://github.com/october-dev/moirai/actions/workflows/ci.yml/badge.svg)](https://github.com/october-dev/moirai/actions/workflows/ci.yml)
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-7C6CF0.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-F97316.svg)](LICENSE)
 [![Schema: 1.0](https://img.shields.io/badge/schema-1.0-28B8D8.svg)](docs/FORMAT.md)
 
 </div>
+
+<p align="center">
+  <img src="assets/header/handoff-demo.svg" width="760" alt="moirai inspects a Claude Code session, previews moving it to Codex with a warning for an image Codex cannot represent, then continues it in Codex.">
+</p>
 
 Moirai discovers local agent sessions, translates their portable context into a
 canonical transcript, writes the destination's native session representation,
